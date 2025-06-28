@@ -10,13 +10,12 @@ authors = [
     {name = "MultiAgenticSwarm Team", email = "contact@multiagenticswarm.dev"}
 ]
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.9"
 keywords = ["ai", "agents", "langgraph", "multi-agent", "automation", "llm"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",

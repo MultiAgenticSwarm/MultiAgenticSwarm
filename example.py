@@ -12,6 +12,10 @@ This example demonstrates all major features:
 import asyncio
 from multiagenticswarm import Agent, Tool, Task, Collaboration, Trigger, Automation, System
 
+# Alternative import style that users can use:
+# import multiagenticswarm as mas
+# agent = mas.Agent(...)
+
 
 # Mock functions for demonstration
 def fetch_from_api(query: str) -> dict:

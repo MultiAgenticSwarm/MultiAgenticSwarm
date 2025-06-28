@@ -39,13 +39,24 @@ A powerful LangGraph-based multi-agent system with dynamic configuration and hie
 ### Installation
 
 ```bash
+# Install from PyPI (when published)
 pip install multiagenticswarm
+
+# Or install from source
+pip install git+https://github.com/yourusername/multiagenticswarm.git
+
+# Or build and install locally
+git clone https://github.com/yourusername/multiagenticswarm.git
+cd multiagenticswarm
+python -m build
+pip install dist/multiagenticswarm-0.1.0-py3-none-any.whl
 ```
 
 ### Basic Usage
 
 ```python
-from multiagenticswarm import Agent, Tool, Task, System
+import multiagenticswarm as mas
+# Or: from multiagenticswarm import Agent, Tool, Task, System
 
 # Create agents with different LLMs
 agent1 = Agent("DataAnalyst", 
