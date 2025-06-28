@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multiagenticswarm"
+version = "0.1.0"
+description = "A powerful LangGraph-based multi-agent system with dynamic configuration and hierarchical tool sharing"
+authors = [
+    {name = "MultiAgenticSwarm Team", email = "contact@multiagenticswarm.dev"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+keywords = ["ai", "agents", "langgraph", "multi-agent", "automation", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "langgraph>=0.2.0",
+    "langchain>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "langchain-anthropic>=0.1.0",
+    "langchain-aws>=0.1.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "asyncio-mqtt>=0.16.0",
+    "typing-extensions>=4.5.0",
+    "uuid>=1.30",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+examples = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "streamlit>=1.28.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/multiagenticswarm/multiagenticswarm"
+Repository = "https://github.com/multiagenticswarm/multiagenticswarm"
+Documentation = "https://multiagenticswarm.readthedocs.io"
+"Bug Tracker" = "https://github.com/multiagenticswarm/multiagenticswarm/issues"
+
+[project.scripts]
+multiagenticswarm = "multiagenticswarm.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["multiagenticswarm*"]
+exclude = ["tests*", "examples*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"

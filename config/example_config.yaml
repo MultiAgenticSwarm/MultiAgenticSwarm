@@ -1,0 +1,402 @@
+# Example Configuration for MultiAgenticSwarm
+# This shows all the features and capabilities
+
+agents:
+  - name: "DataAnalyst"
+    description: "Expert data analyst for business intelligence"
+    system_prompt: |
+      You are an expert data analyst with deep knowledge of business intelligence,
+      statistics, and data visualization. Analyze data thoroughly and provide
+      actionable insights. Always consider business context in your analysis.
+    llm_provider: "openai"
+    llm_model: "gpt-4"
+    llm_config:
+      temperature: 0.3
+      max_tokens: 2000
+    max_iterations: 5
+    memory_enabled: true
+
+  - name: "ActionExecutor"
+    description: "Executes business actions based on analysis"
+    system_prompt: |
+      You are an action-oriented business executor. Take analysis results and
+      convert them into concrete business actions. Be specific about steps,
+      timelines, and responsibilities.
+    llm_provider: "anthropic"
+    llm_model: "claude-3.5-sonnet"
+    llm_config:
+      temperature: 0.5
+      max_tokens: 1500
+    max_iterations: 3
+    memory_enabled: true
+
+  - name: "ReportGenerator"
+    description: "Creates comprehensive business reports"
+    system_prompt: |
+      You are a professional report writer. Create clear, structured reports
+      with executive summaries, detailed findings, and recommendations.
+      Use professional business language.
+    llm_provider: "openai"
+    llm_model: "gpt-3.5-turbo"
+    llm_config:
+      temperature: 0.4
+      max_tokens: 3000
+    max_iterations: 2
+    memory_enabled: true
+
+  - name: "NotificationAgent"
+    description: "Handles all system notifications"
+    system_prompt: |
+      You handle notifications and alerts. Create clear, concise messages
+      appropriate for the recipient and urgency level.
+    llm_provider: "openai"
+    llm_model: "gpt-3.5-turbo"
+    llm_config:
+      temperature: 0.2
+      max_tokens: 500
+    max_iterations: 1
+    memory_enabled: false
+
+tools:
+  # Local tools - specific to one agent
+  - name: "DataAPIFetcher"
+    description: "Fetches data from various APIs"
+    scope: "local"
+    agents: ["DataAnalyst"]
+    parameters:
+      type: "object"
+      properties:
+        endpoint:
+          type: "string"
+          description: "API endpoint to fetch from"
+        query:
+          type: "string"
+          description: "Query parameters"
+        format:
+          type: "string"
+          enum: ["json", "csv", "xml"]
+          default: "json"
+      required: ["endpoint", "query"]
+
+  - name: "DatabaseConnector"
+    description: "Connects to databases for data retrieval"
+    scope: "local"
+    agents: ["DataAnalyst"]
+    parameters:
+      type: "object"
+      properties:
+        connection_string:
+          type: "string"
+          description: "Database connection string"
+        query:
+          type: "string"
+          description: "SQL query to execute"
+        timeout:
+          type: "integer"
+          default: 30
+      required: ["connection_string", "query"]
+
+  # Shared tools - available to specific agents
+  - name: "DataProcessor"
+    description: "Processes and transforms data"
+    scope: "shared"
+    agents: ["DataAnalyst", "ActionExecutor", "ReportGenerator"]
+    parameters:
+      type: "object"
+      properties:
+        data:
+          type: "object"
+          description: "Data to process"
+        operations:
+          type: "array"
+          items:
+            type: "string"
+          description: "List of operations to perform"
+        output_format:
+          type: "string"
+          enum: ["json", "csv", "summary"]
+          default: "json"
+      required: ["data"]
+
+  - name: "DocumentGenerator"
+    description: "Generates various document formats"
+    scope: "shared"
+    agents: ["ReportGenerator", "ActionExecutor"]
+    parameters:
+      type: "object"
+      properties:
+        content:
+          type: "string"
+          description: "Content to include in document"
+        format:
+          type: "string"
+          enum: ["pdf", "word", "html", "markdown"]
+          default: "pdf"
+        template:
+          type: "string"
+          description: "Template to use"
+      required: ["content"]
+
+  # Global tools - available to all agents
+  - name: "EmailSender"
+    description: "Sends emails to recipients"
+    scope: "global"
+    parameters:
+      type: "object"
+      properties:
+        recipients:
+          type: "array"
+          items:
+            type: "string"
+          description: "Email recipients"
+        subject:
+          type: "string"
+          description: "Email subject"
+        body:
+          type: "string"
+          description: "Email body"
+        priority:
+          type: "string"
+          enum: ["low", "normal", "high"]
+          default: "normal"
+      required: ["recipients", "subject", "body"]
+
+  - name: "SlackNotifier"
+    description: "Sends notifications to Slack"
+    scope: "global"
+    parameters:
+      type: "object"
+      properties:
+        channel:
+          type: "string"
+          description: "Slack channel"
+        message:
+          type: "string"
+          description: "Message to send"
+        urgency:
+          type: "string"
+          enum: ["info", "warning", "error"]
+          default: "info"
+      required: ["channel", "message"]
+
+  - name: "FileManager"
+    description: "Manages file operations"
+    scope: "global"
+    parameters:
+      type: "object"
+      properties:
+        operation:
+          type: "string"
+          enum: ["read", "write", "delete", "copy", "move"]
+        path:
+          type: "string"
+          description: "File path"
+        content:
+          type: "string"
+          description: "Content for write operations"
+        destination:
+          type: "string"
+          description: "Destination for copy/move operations"
+      required: ["operation", "path"]
+
+tasks:
+  - name: "DailyDataAnalysis"
+    description: "Complete daily data analysis workflow"
+    parallel: false
+    max_retries: 2
+    timeout: 300
+    steps:
+      - agent: "DataAnalyst"
+        tool: "DataAPIFetcher"
+        input: "fetch daily sales data"
+        context:
+          endpoint: "https://api.company.com/sales/daily"
+          date: "today"
+      
+      - agent: "DataAnalyst"
+        tool: "DatabaseConnector"
+        input: "get customer data for analysis"
+        context:
+          query: "SELECT * FROM customers WHERE created_date >= CURRENT_DATE - INTERVAL 1 DAY"
+      
+      - agent: "DataAnalyst"
+        tool: "DataProcessor"
+        input: "analyze sales trends and customer behavior"
+        context:
+          operations: ["trend_analysis", "customer_segmentation", "anomaly_detection"]
+      
+      - agent: "ReportGenerator"
+        tool: "DataProcessor"
+        input: "prepare report data"
+        context:
+          operations: ["summarize", "format_for_report"]
+      
+      - agent: "ReportGenerator" 
+        tool: "DocumentGenerator"
+        input: "generate daily sales report"
+        context:
+          format: "pdf"
+          template: "daily_sales_template"
+      
+      - agent: "ActionExecutor"
+        tool: "EmailSender"
+        input: "send report to management"
+        context:
+          recipients: ["ceo@company.com", "coo@company.com", "sales-director@company.com"]
+          subject: "Daily Sales Analysis Report"
+          priority: "high"
+
+  - name: "WeeklyBusinessReview"
+    description: "Weekly comprehensive business review"
+    parallel: false
+    max_retries: 1
+    timeout: 600
+    steps:
+      - agent: "DataAnalyst"
+        tool: "DatabaseConnector"
+        input: "fetch weekly performance data"
+        context:
+          query: "SELECT * FROM weekly_metrics WHERE week_ending = CURRENT_DATE"
+      
+      - agent: "DataAnalyst"
+        tool: "DataProcessor"
+        input: "perform comprehensive weekly analysis"
+        context:
+          operations: ["weekly_trends", "goal_comparison", "forecast_update"]
+      
+      - agent: "ReportGenerator"
+        tool: "DocumentGenerator"
+        input: "create executive summary"
+        context:
+          format: "word"
+          template: "executive_summary_template"
+      
+      - agent: "ActionExecutor"
+        tool: "SlackNotifier"
+        input: "notify team of weekly review completion"
+        context:
+          channel: "#leadership"
+          urgency: "info"
+
+  - name: "AlertResponse"
+    description: "Respond to system alerts quickly"
+    parallel: false
+    max_retries: 3
+    timeout: 60
+    steps:
+      - agent: "DataAnalyst"
+        tool: "DataProcessor"
+        input: "analyze alert data"
+        context:
+          operations: ["quick_analysis", "severity_assessment"]
+      
+      - agent: "NotificationAgent"
+        tool: "SlackNotifier"
+        input: "send immediate alert"
+        context:
+          channel: "#alerts"
+          urgency: "error"
+      
+      - agent: "ActionExecutor"
+        tool: "EmailSender"
+        input: "escalate if necessary"
+        condition: "severity == 'critical'"
+        context:
+          recipients: ["oncall@company.com"]
+          subject: "CRITICAL: System Alert"
+          priority: "high"
+
+triggers:
+  - name: "DataUpdateTrigger"
+    trigger_type: "event"
+    condition_string: "event.type == 'data_update' and event.source == 'sales_api'"
+    description: "Triggers when sales data is updated"
+
+  - name: "DailyScheduleTrigger"
+    trigger_type: "schedule"
+    schedule: "0 9 * * *"  # 9 AM daily
+    description: "Daily scheduled trigger for morning reports"
+
+  - name: "WeeklyScheduleTrigger" 
+    trigger_type: "schedule"
+    schedule: "0 10 * * 1"  # 10 AM on Mondays
+    description: "Weekly scheduled trigger for business reviews"
+
+  - name: "SystemAlertTrigger"
+    trigger_type: "event"
+    condition_string: "event.type == 'system_alert' and event.severity in ['high', 'critical']"
+    description: "Triggers on high severity system alerts"
+
+  - name: "WebhookTrigger"
+    trigger_type: "webhook"
+    webhook_path: "/webhooks/external-data"
+    description: "Webhook for external data updates"
+
+  - name: "BusinessHoursTrigger"
+    trigger_type: "condition"
+    condition_string: "event.type == 'business_event' and 9 <= event.hour <= 17"
+    description: "Only trigger during business hours (9 AM - 5 PM)"
+
+automations:
+  - trigger: "DataUpdateTrigger"
+    task: "DailyDataAnalysis"
+    name: "AutoDataAnalysis"
+    description: "Automatically analyze data when updated"
+    mode: "immediate"
+    conditions:
+      business_hours: true
+    retry_policy:
+      max_retries: 2
+      delay: 5.0
+
+  - trigger: "DailyScheduleTrigger"
+    task: "DailyDataAnalysis"
+    name: "ScheduledDailyAnalysis"
+    description: "Daily scheduled data analysis"
+    mode: "immediate"
+    retry_policy:
+      max_retries: 1
+      delay: 10.0
+
+  - trigger: "WeeklyScheduleTrigger"
+    task: "WeeklyBusinessReview"
+    name: "WeeklyBusinessReview"
+    description: "Weekly business review automation"
+    mode: "immediate"
+    retry_policy:
+      max_retries: 1
+      delay: 15.0
+
+  - trigger: "SystemAlertTrigger"
+    task: "AlertResponse"
+    name: "AutoAlertResponse"
+    description: "Automatic response to system alerts"
+    mode: "immediate"
+    conditions:
+      alert_enabled: true
+    retry_policy:
+      max_retries: 3
+      delay: 2.0
+
+  - trigger: "WebhookTrigger"
+    task: "DailyDataAnalysis"
+    name: "WebhookDataAnalysis"
+    description: "Analyze data from webhook triggers"
+    mode: "queued"
+    retry_policy:
+      max_retries: 2
+      delay: 5.0
+
+# System configuration
+system:
+  name: "BusinessIntelligenceSystem"
+  description: "Multi-agent system for business intelligence and automation"
+  version: "1.0.0"
+  settings:
+    max_concurrent_tasks: 5
+    default_timeout: 300
+    log_level: "INFO"
+    enable_monitoring: true
+    enable_web_interface: true
+    web_port: 8000
+    api_port: 8001

@@ -1,0 +1,130 @@
+{
+  "agents": [
+    {
+      "name": "QuickAgent",
+      "description": "Fast response agent for immediate tasks",
+      "system_prompt": "You provide quick, efficient responses to immediate requests.",
+      "llm_provider": "openai",
+      "llm_model": "gpt-3.5-turbo",
+      "llm_config": {
+        "temperature": 0.7,
+        "max_tokens": 1000
+      }
+    },
+    {
+      "name": "DetailedAgent", 
+      "description": "Thorough analysis agent for complex tasks",
+      "system_prompt": "You provide detailed, comprehensive analysis and responses.",
+      "llm_provider": "anthropic",
+      "llm_model": "claude-3.5-sonnet",
+      "llm_config": {
+        "temperature": 0.3,
+        "max_tokens": 2500
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "QuickSearch",
+      "description": "Fast search tool",
+      "scope": "local",
+      "agents": ["QuickAgent"],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "Search query"}
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "DeepAnalysis",
+      "description": "Comprehensive analysis tool",
+      "scope": "shared",
+      "agents": ["QuickAgent", "DetailedAgent"],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "data": {"type": "object", "description": "Data to analyze"},
+          "depth": {"type": "string", "enum": ["shallow", "medium", "deep"], "default": "medium"}
+        },
+        "required": ["data"]
+      }
+    },
+    {
+      "name": "Notifier",
+      "description": "Global notification tool",
+      "scope": "global",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": {"type": "string", "description": "Message to send"},
+          "level": {"type": "string", "enum": ["info", "warning", "error"], "default": "info"}
+        },
+        "required": ["message"]
+      }
+    }
+  ],
+  "tasks": [
+    {
+      "name": "QuickResponse",
+      "description": "Quick response workflow",
+      "steps": [
+        {
+          "agent": "QuickAgent",
+          "tool": "QuickSearch",
+          "input": "search for immediate answer"
+        },
+        {
+          "agent": "QuickAgent",
+          "tool": "Notifier",
+          "input": "send quick response"
+        }
+      ]
+    },
+    {
+      "name": "DetailedAnalysis",
+      "description": "Comprehensive analysis workflow",
+      "steps": [
+        {
+          "agent": "DetailedAgent",
+          "tool": "DeepAnalysis", 
+          "input": "perform thorough analysis"
+        },
+        {
+          "agent": "DetailedAgent",
+          "tool": "Notifier",
+          "input": "send detailed report"
+        }
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "name": "UrgentRequest",
+      "trigger_type": "event",
+      "condition_string": "event.priority == 'urgent'",
+      "description": "Triggers on urgent requests"
+    },
+    {
+      "name": "ScheduledAnalysis",
+      "trigger_type": "schedule", 
+      "schedule": "0 */4 * * *",
+      "description": "Every 4 hours"
+    }
+  ],
+  "automations": [
+    {
+      "trigger": "UrgentRequest",
+      "task": "QuickResponse",
+      "name": "UrgentResponseAuto",
+      "description": "Auto-respond to urgent requests"
+    },
+    {
+      "trigger": "ScheduledAnalysis",
+      "task": "DetailedAnalysis", 
+      "name": "ScheduledAnalysisAuto",
+      "description": "Scheduled comprehensive analysis"
+    }
+  ]
+}
