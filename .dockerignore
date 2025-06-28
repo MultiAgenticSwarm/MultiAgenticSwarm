@@ -1,0 +1,114 @@
+# .dockerignore for MultiAgenticSwarm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+logs/
+*.log
+.logs/
+
+# Documentation
+docs/_build/
+site/
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+.travis.yml
+.gitlab-ci.yml
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Development files
+*.orig
+*.bak
+*.tmp
+.DS_Store
+
+# Large files that shouldn't be in container
+*.zip
+*.tar.gz
+*.tgz
+
+# Configuration that should be mounted
+config/local_*
+config/dev_*
+config/prod_*
+
+# Examples (mount separately if needed)
+examples/
+
+# Tests (not needed in production container)
+tests/
+conftest.py
+pytest.ini
+.pytest_cache/

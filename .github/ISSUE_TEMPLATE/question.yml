@@ -1,0 +1,82 @@
+name: Question
+description: Ask a question about MultiAgenticSwarm
+title: "[Question]: "
+labels: ["question", "triage"]
+assignees:
+  -
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your question! Please check our documentation and existing issues first.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish?
+      placeholder: I'm trying to build a system that...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What have you tried?
+      description: What approaches have you already attempted?
+      placeholder: |
+        I tried:
+        1. ...
+        2. ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Relevant Code
+      description: Please share any relevant code snippets
+      render: python
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Tell us about your environment (if relevant)
+      placeholder: |
+        - OS: Ubuntu 20.04
+        - Python: 3.10.0
+        - MultiAgenticSwarm: 0.1.0
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: searched
+    attributes:
+      label: Research
+      description: Have you done your research?
+      options:
+        - label: I searched existing issues and discussions
+        - label: I checked the documentation
+        - label: I looked at the examples
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

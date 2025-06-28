@@ -1,0 +1,135 @@
+# Pre-commit configuration for MultiAgenticSwarm
+# See https://pre-commit.com for more information
+
+repos:
+  # Black - Python code formatter
+  - repo: https://github.com/psf/black
+    rev: '23.12.1'
+    hooks:
+      - id: black
+        language_version: python3
+        args: [--line-length=88]
+
+  # isort - Import sorter
+  - repo: https://github.com/PyCQA/isort
+    rev: '5.13.2'
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=88]
+
+  # flake8 - Python linter
+  - repo: https://github.com/PyCQA/flake8
+    rev: '7.0.0'
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88, --extend-ignore=E203,W503]
+        additional_dependencies:
+          - flake8-docstrings
+          - flake8-builtins
+          - flake8-comprehensions
+          - flake8-pytest-style
+
+  # mypy - Static type checker
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v1.8.0'
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-PyYAML, types-requests]
+        args: [--ignore-missing-imports]
+
+  # bandit - Security linter
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.6'
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml]
+        additional_dependencies: [bandit[toml]]
+
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 'v4.5.0'
+    hooks:
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+
+      # Check for merge conflicts
+      - id: check-merge-conflict
+
+      # Check JSON files
+      - id: check-json
+
+      # Check TOML files
+      - id: check-toml
+
+      # Check YAML files
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+
+      # Check for large files
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+
+      # Check that executables have shebangs
+      - id: check-executables-have-shebangs
+
+      # Check that scripts with shebangs are executable
+      - id: check-shebang-scripts-are-executable
+
+      # Fix end of files
+      - id: end-of-file-fixer
+
+      # Fix trailing whitespace
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+      # Mixed line endings
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Conventional commits
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: 'v3.0.0'
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [optional-scope]
+
+  # Dockerfile linter
+  - repo: https://github.com/hadolint/hadolint
+    rev: 'v2.12.0'
+    hooks:
+      - id: hadolint-docker
+        args: [--ignore, DL3008, --ignore, DL3009]
+
+  # Security check for requirements
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: 'v1.3.2'
+    hooks:
+      - id: python-safety-dependencies-check
+        files: pyproject.toml
+
+  # Check for secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: 'v1.4.0'
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: .*/tests/.*
+
+# Configuration for specific hooks
+default_language_version:
+  python: python3.10
+
+# Global exclusions
+exclude: |
+  (?x)^(
+    .*/__pycache__/.*|
+    .*/\.git/.*|
+    .*/build/.*|
+    .*/dist/.*|
+    .*\.egg-info/.*|
+    .*/venv/.*|
+    .*/env/.*|
+    logs/.*|
+    .*\.log
+  )$

@@ -1,0 +1,86 @@
+# Docker Compose for MultiAgenticSwarm Development
+
+version: '3.8'
+
+services:
+  multiagenticswarm:
+    build: .
+    container_name: multiagenticswarm-app
+    volumes:
+      - ./logs:/app/logs
+      - ./config:/app/config
+      - ./examples:/app/examples
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    ports:
+      - "8000:8000"
+    networks:
+      - multiagenticswarm-network
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: multiagenticswarm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - multiagenticswarm-network
+
+  # PostgreSQL for persistence (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: multiagenticswarm-postgres
+    environment:
+      - POSTGRES_DB=multiagenticswarm
+      - POSTGRES_USER=multiagenticswarm
+      - POSTGRES_PASSWORD=multiagenticswarm
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - multiagenticswarm-network
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: multiagenticswarm-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - multiagenticswarm-network
+    profiles:
+      - monitoring
+
+  # Grafana for dashboards (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: multiagenticswarm-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - multiagenticswarm-network
+    profiles:
+      - monitoring
+
+volumes:
+  redis-data:
+  postgres-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  multiagenticswarm-network:
+    driver: bridge

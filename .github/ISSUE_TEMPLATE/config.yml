@@ -1,0 +1,15 @@
+---
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/multiagenticswarm/multiagenticswarm/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📚 Documentation
+    url: https://multiagenticswarm.readthedocs.io
+    about: Check our comprehensive documentation
+  - name: 💻 Examples
+    url: https://github.com/multiagenticswarm/multiagenticswarm/tree/main/examples
+    about: Browse code examples and tutorials
+  - name: 🔔 Discord Community
+    url: https://discord.gg/MultiAgenticSwarm
+    about: Join our Discord community for real-time chat

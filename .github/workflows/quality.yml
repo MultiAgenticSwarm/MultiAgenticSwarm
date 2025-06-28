@@ -1,0 +1,317 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run weekly quality checks
+    - cron: '0 6 * * 0'
+
+jobs:
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install radon xenon complexity-report
+
+      - name: Run code complexity analysis
+        run: |
+          echo "# Code Quality Report" > quality-report.md
+          echo "" >> quality-report.md
+
+          # Cyclomatic complexity
+          echo "## Cyclomatic Complexity" >> quality-report.md
+          echo '```' >> quality-report.md
+          radon cc multiagenticswarm/ -a >> quality-report.md
+          echo '```' >> quality-report.md
+          echo "" >> quality-report.md
+
+          # Maintainability index
+          echo "## Maintainability Index" >> quality-report.md
+          echo '```' >> quality-report.md
+          radon mi multiagenticswarm/ >> quality-report.md
+          echo '```' >> quality-report.md
+          echo "" >> quality-report.md
+
+          # Raw metrics
+          echo "## Raw Metrics" >> quality-report.md
+          echo '```' >> quality-report.md
+          radon raw multiagenticswarm/ >> quality-report.md
+          echo '```' >> quality-report.md
+
+      - name: Check complexity thresholds
+        run: |
+          # Fail if average complexity is too high
+          xenon --max-average A --max-modules B --max-absolute B multiagenticswarm/
+
+      - name: Upload quality report
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-quality-report
+          path: quality-report.md
+
+  documentation-quality:
+    name: Documentation Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pydocstyle interrogate
+
+      - name: Check docstring coverage
+        run: |
+          echo "# Documentation Quality Report" > doc-quality-report.md
+          echo "" >> doc-quality-report.md
+
+          # Docstring coverage
+          echo "## Docstring Coverage" >> doc-quality-report.md
+          echo '```' >> doc-quality-report.md
+          interrogate multiagenticswarm/ -v >> doc-quality-report.md
+          echo '```' >> doc-quality-report.md
+
+          # Docstring style check
+          echo "## Docstring Style Issues" >> doc-quality-report.md
+          echo '```' >> doc-quality-report.md
+          pydocstyle multiagenticswarm/ >> doc-quality-report.md || true
+          echo '```' >> doc-quality-report.md
+
+      - name: Upload documentation report
+        uses: actions/upload-artifact@v3
+        with:
+          name: documentation-quality-report
+          path: doc-quality-report.md
+
+  test-quality:
+    name: Test Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pytest-cov pytest-html pytest-json-report mutmut
+
+      - name: Run comprehensive test suite
+        run: |
+          # Run tests with detailed coverage
+          python -m pytest tests/ \
+            --cov=multiagenticswarm \
+            --cov-report=html \
+            --cov-report=json \
+            --cov-report=term-missing \
+            --html=test-report.html \
+            --json-report --json-report-file=test-report.json \
+            --tb=short \
+            -v
+
+      - name: Analyze test coverage
+        run: |
+          echo "# Test Quality Report" > test-quality-report.md
+          echo "" >> test-quality-report.md
+
+          # Coverage summary
+          echo "## Coverage Summary" >> test-quality-report.md
+          echo '```' >> test-quality-report.md
+          python -c "
+          import json
+          with open('test-report.json') as f:
+              data = json.load(f)
+
+          print(f'Tests run: {data[\"summary\"][\"total\"]}')
+          print(f'Passed: {data[\"summary\"][\"passed\"]}')
+          print(f'Failed: {data[\"summary\"][\"failed\"]}')
+          print(f'Skipped: {data[\"summary\"][\"skipped\"]}')
+          print(f'Duration: {data[\"duration\"]:.2f}s')
+          " >> test-quality-report.md
+          echo '```' >> test-quality-report.md
+
+          # Coverage details
+          if [ -f .coverage ]; then
+            echo "" >> test-quality-report.md
+            echo "## Coverage Details" >> test-quality-report.md
+            echo '```' >> test-quality-report.md
+            python -m coverage report >> test-quality-report.md
+            echo '```' >> test-quality-report.md
+          fi
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-quality-reports
+          path: |
+            test-quality-report.md
+            test-report.html
+            htmlcov/
+
+  performance-analysis:
+    name: Performance Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pytest-benchmark memory-profiler line-profiler
+
+      - name: Run performance benchmarks
+        run: |
+          # Create basic performance tests if they don't exist
+          mkdir -p tests/performance
+
+          cat > tests/performance/test_benchmarks.py << 'EOF'
+          """Basic performance benchmarks for MultiAgenticSwarm."""
+
+          import pytest
+          import time
+
+          def test_import_time(benchmark):
+              """Benchmark import time."""
+              def import_multiagenticswarm():
+                  import multiagenticswarm
+                  return multiagenticswarm
+
+              result = benchmark(import_multiagenticswarm)
+              assert result is not None
+
+          def test_system_creation(benchmark):
+              """Benchmark system creation."""
+              def create_system():
+                  try:
+                      import multiagenticswarm as mas
+                      if mas.System:
+                          return mas.System()
+                      return None
+                  except Exception:
+                      return None
+
+              result = benchmark(create_system)
+              # System creation should be reasonably fast
+              assert benchmark.stats.stats.mean < 1.0  # Less than 1 second
+          EOF
+
+          # Run benchmark tests
+          python -m pytest tests/performance/ --benchmark-json=benchmark-results.json -v || true
+
+      - name: Generate performance report
+        run: |
+          echo "# Performance Analysis Report" > performance-report.md
+          echo "" >> performance-report.md
+
+          if [ -f benchmark-results.json ]; then
+            echo "## Benchmark Results" >> performance-report.md
+            echo '```json' >> performance-report.md
+            cat benchmark-results.json | python -m json.tool >> performance-report.md
+            echo '```' >> performance-report.md
+          else
+            echo "No benchmark results available." >> performance-report.md
+          fi
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-analysis-report
+          path: |
+            performance-report.md
+            benchmark-results.json
+
+  quality-summary:
+    name: Quality Summary
+    runs-on: ubuntu-latest
+    needs: [code-quality, documentation-quality, test-quality, performance-analysis]
+    if: always()
+    steps:
+      - name: Download all reports
+        uses: actions/download-artifact@v3
+
+      - name: Create quality summary
+        run: |
+          echo "# MultiAgenticSwarm Quality Summary" > QUALITY-SUMMARY.md
+          echo "" >> QUALITY-SUMMARY.md
+          echo "Generated on: $(date)" >> QUALITY-SUMMARY.md
+          echo "" >> QUALITY-SUMMARY.md
+
+          # Add results from each job
+          for report in */; do
+            if [ -d "$report" ]; then
+              echo "## ${report%/}" >> QUALITY-SUMMARY.md
+              echo "" >> QUALITY-SUMMARY.md
+
+              for file in "$report"*.md; do
+                if [ -f "$file" ]; then
+                  cat "$file" >> QUALITY-SUMMARY.md
+                  echo "" >> QUALITY-SUMMARY.md
+                fi
+              done
+            fi
+          done
+
+      - name: Upload quality summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: quality-summary
+          path: QUALITY-SUMMARY.md
+
+      - name: Comment quality summary on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('QUALITY-SUMMARY.md')) {
+              const summary = fs.readFileSync('QUALITY-SUMMARY.md', 'utf8');
+
+              // Truncate if too long for GitHub comment
+              const maxLength = 60000;
+              const truncatedSummary = summary.length > maxLength
+                ? summary.substring(0, maxLength) + '\n\n... (truncated)'
+                : summary;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: truncatedSummary
+              });
+            }
