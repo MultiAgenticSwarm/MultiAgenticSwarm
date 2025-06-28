@@ -118,6 +118,14 @@ class ToolExecutor:
         
         return final_responses
     
+    def get_tool(self, tool_name: str) -> Optional[BaseTool]:
+        """Get a specific tool by name."""
+        return self.tools.get(tool_name)
+    
+    def get_all_tools(self) -> List[BaseTool]:
+        """Get all registered tools."""
+        return list(self.tools.values())
+    
     def get_execution_stats(self) -> Dict[str, Any]:
         """Get execution statistics."""
         total_executions = len(self.execution_history)

@@ -6,7 +6,7 @@ import asyncio
 import json
 import yaml
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 
 from .agent import Agent
 from .tool import Tool, create_logger_tool, create_memory_tool
@@ -16,6 +16,19 @@ from .automation import Automation
 from .base_tool import BaseTool, FunctionTool, ToolScope
 from .tool_executor import ToolExecutor
 from ..utils.logger import get_logger, setup_comprehensive_logging, get_logging_config
+
+# MCP integration imports (optional)
+try:
+    from .mcp_integration import MCPServer, MCPClient, MCPTransportType
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    MCPServer = None
+    MCPClient = None
+    MCPTransportType = None
+
+if TYPE_CHECKING:
+    from .mcp_integration import MCPServer, MCPClient
 
 logger = get_logger(__name__)
 
@@ -63,6 +76,10 @@ class System:
         self.running = False
         self.event_queue: List[Dict[str, Any]] = []
         self.execution_context: Dict[str, Any] = {}
+        
+        # MCP components (initialize after other components)
+        self.mcp_servers: Dict[str, Any] = {}
+        self.mcp_clients: Dict[str, Any] = {}
         
         # Add built-in tools
         self._add_builtin_tools()
@@ -658,3 +675,227 @@ class System:
         
         logger.log_system_event("system_stats_requested", stats)
         return stats
+    
+    # MCP Integration Management
+    def register_mcp_server(
+        self, 
+        name: str,
+        host: str = "localhost",
+        port: int = 8765,
+        transport: str = "websocket",
+        expose_global_tools: bool = True,
+        expose_tools: Optional[List[str]] = None
+    ) -> Any:
+        """
+        Register and configure an MCP server to expose tools.
+        
+        Args:
+            name: Server name
+            host: Server host (default: localhost)
+            port: Server port (default: 8765)
+            transport: Transport type (websocket or http)
+            expose_global_tools: Whether to expose all global tools
+            expose_tools: Specific tool names to expose (None = all global tools)
+            
+        Returns:
+            MCPServer instance
+        """
+        try:
+            from .mcp_integration import MCPServer, MCPTransportType
+            
+            # Convert transport string to enum
+            transport_type = MCPTransportType(transport.lower())
+            
+            # Create MCP server
+            mcp_server = MCPServer(
+                name=name,
+                host=host,
+                port=port,
+                transport=transport_type
+            )
+            
+            # Expose tools
+            if expose_tools:
+                # Expose specific tools
+                for tool_name in expose_tools:
+                    if tool_name in self.tools:
+                        # Convert legacy Tool to BaseTool if needed
+                        tool = self.tools[tool_name]
+                        if hasattr(tool, 'to_base_tool'):
+                            base_tool = tool.to_base_tool()
+                        else:
+                            # Try to find in standardized tool registry
+                            base_tool = self.tool_executor.get_tool(tool_name)
+                        
+                        if base_tool:
+                            mcp_server.expose_tool(base_tool, force_global=True)
+                        else:
+                            logger.warning(f"Tool '{tool_name}' not found or not convertible to BaseTool")
+            elif expose_global_tools:
+                # Expose all global tools
+                for tool_name, tool in self.tools.items():
+                    if tool.is_global:
+                        # Convert legacy Tool to BaseTool if needed
+                        if hasattr(tool, 'to_base_tool'):
+                            base_tool = tool.to_base_tool()
+                        else:
+                            # Try to find in standardized tool registry
+                            base_tool = self.tool_executor.get_tool(tool_name)
+                        
+                        if base_tool:
+                            mcp_server.expose_tool(base_tool, force_global=True)
+                
+                # Also expose standardized tools
+                for base_tool in self.tool_executor.get_all_tools():
+                    if base_tool.is_global:
+                        mcp_server.expose_tool(base_tool)
+            
+            self.mcp_servers[name] = mcp_server
+            logger.info(f"Registered MCP server '{name}' at {host}:{port}")
+            
+            return mcp_server
+            
+        except ImportError:
+            logger.error("MCP integration not available. Install required dependencies: pip install websockets aiohttp")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to register MCP server '{name}': {e}")
+            raise
+    
+    async def start_mcp_server(self, name: str) -> None:
+        """Start an MCP server."""
+        if name not in self.mcp_servers:
+            raise ValueError(f"MCP server '{name}' not found")
+        
+        await self.mcp_servers[name].start()
+        logger.info(f"Started MCP server '{name}'")
+    
+    async def stop_mcp_server(self, name: str) -> None:
+        """Stop an MCP server."""
+        if name not in self.mcp_servers:
+            raise ValueError(f"MCP server '{name}' not found")
+        
+        await self.mcp_servers[name].stop()
+        logger.info(f"Stopped MCP server '{name}'")
+    
+    async def connect_mcp_client(
+        self,
+        name: str,
+        server_url: str,
+        transport: str = "websocket",
+        register_tools: bool = True,
+        tool_scope: str = "global"
+    ) -> Any:
+        """
+        Connect to an external MCP server as a client.
+        
+        Args:
+            name: Client name
+            server_url: MCP server URL
+            transport: Transport type (websocket or http)
+            register_tools: Whether to register discovered tools in the system
+            tool_scope: Scope for registered tools (global, shared, local)
+            
+        Returns:
+            MCPClient instance
+        """
+        try:
+            from .mcp_integration import MCPClient, MCPTransportType
+            from .base_tool import ToolScope
+            
+            # Convert transport string to enum
+            transport_type = MCPTransportType(transport.lower())
+            
+            # Create and connect MCP client
+            mcp_client = MCPClient(
+                server_url=server_url,
+                name=f"MultiAgenticSwarm-{name}",
+                transport=transport_type
+            )
+            
+            await mcp_client.connect()
+            
+            # Register tools if requested
+            if register_tools:
+                scope = ToolScope(tool_scope.lower())
+                mcp_tools = mcp_client.create_mcp_tools(scope)
+                
+                for mcp_tool in mcp_tools:
+                    # Register with standardized tool executor
+                    self.tool_executor.register_tool(mcp_tool)
+                    
+                    # Also register with legacy system for backwards compatibility
+                    # (would need a Tool wrapper, but for now just log)
+                    logger.info(f"Registered MCP tool '{mcp_tool.name}' from server '{server_url}'")
+            
+            self.mcp_clients[name] = mcp_client
+            logger.info(f"Connected MCP client '{name}' to {server_url}")
+            
+            return mcp_client
+            
+        except ImportError:
+            logger.error("MCP integration not available. Install required dependencies: pip install websockets aiohttp")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to connect MCP client '{name}': {e}")
+            raise
+    
+    async def disconnect_mcp_client(self, name: str) -> None:
+        """Disconnect an MCP client."""
+        if name not in self.mcp_clients:
+            raise ValueError(f"MCP client '{name}' not found")
+        
+        await self.mcp_clients[name].disconnect()
+        del self.mcp_clients[name]
+        logger.info(f"Disconnected MCP client '{name}'")
+    
+    def get_mcp_server(self, name: str) -> Optional[Any]:
+        """Get an MCP server by name."""
+        return self.mcp_servers.get(name)
+    
+    def get_mcp_client(self, name: str) -> Optional[Any]:
+        """Get an MCP client by name."""
+        return self.mcp_clients.get(name)
+    
+    def list_mcp_servers(self) -> List[str]:
+        """List all registered MCP server names."""
+        return list(self.mcp_servers.keys())
+    
+    def list_mcp_clients(self) -> List[str]:
+        """List all connected MCP client names."""
+        return list(self.mcp_clients.keys())
+    
+    def get_mcp_status(self) -> Dict[str, Any]:
+        """Get status of all MCP components."""
+        servers_status = {}
+        for name, server in self.mcp_servers.items():
+            servers_status[name] = server.get_status()
+        
+        clients_status = {}
+        for name, client in self.mcp_clients.items():
+            clients_status[name] = client.get_status()
+        
+        return {
+            "servers": servers_status,
+            "clients": clients_status,
+            "total_servers": len(self.mcp_servers),
+            "total_clients": len(self.mcp_clients)
+        }
+    
+    async def shutdown_mcp_components(self) -> None:
+        """Shutdown all MCP servers and disconnect all clients."""
+        # Stop all servers
+        for name in list(self.mcp_servers.keys()):
+            try:
+                await self.stop_mcp_server(name)
+            except Exception as e:
+                logger.error(f"Error stopping MCP server '{name}': {e}")
+        
+        # Disconnect all clients
+        for name in list(self.mcp_clients.keys()):
+            try:
+                await self.disconnect_mcp_client(name)
+            except Exception as e:
+                logger.error(f"Error disconnecting MCP client '{name}': {e}")
+        
+        logger.info("All MCP components shut down")

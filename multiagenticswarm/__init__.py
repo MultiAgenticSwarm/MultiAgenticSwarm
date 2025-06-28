@@ -63,6 +63,27 @@ except ImportError as e:
     clear_logs = None
     LogViewer = None
 
+# MCP integration components (optional)
+try:
+    from .core.mcp_integration import (
+        MCPServer,
+        MCPClient,
+        MCPTool,
+        MCPTransportType,
+        MCPMessage,
+        MCPCapability,
+        MCPToolDescriptor
+    )
+except ImportError as e:
+    # MCP integration is optional
+    MCPServer = None
+    MCPClient = None
+    MCPTool = None
+    MCPTransportType = None
+    MCPMessage = None
+    MCPCapability = None
+    MCPToolDescriptor = None
+
 __version__ = "0.1.0"
 __author__ = "MultiAgenticSwarm Team"
 __email__ = "contact@multiagenticswarm.dev"
@@ -91,7 +112,15 @@ __all__ = [
     "get_logs", 
     "view_logs",
     "clear_logs",
-    "LogViewer"
+    "LogViewer",
+    # MCP integration components (may be None if import fails)
+    "MCPServer",
+    "MCPClient",
+    "MCPTool",
+    "MCPTransportType",
+    "MCPMessage",
+    "MCPCapability",
+    "MCPToolDescriptor"
 ]
 
 # Filter out None values from __all__
