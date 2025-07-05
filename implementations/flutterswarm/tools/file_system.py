@@ -210,6 +210,47 @@ class FileSystemTool:
             return path
         return os.path.join(self.working_directory, path)
 
+    async def execute(self, operation: str, path: str, **kwargs) -> Dict[str, Any]:
+        """Execute file system operation - dispatcher method"""
+
+        if operation == "read":
+            return await self.read_file(path, kwargs.get("encoding", "utf-8"))
+        elif operation == "write":
+            return await self.write_file(
+                path,
+                kwargs.get("content", ""),
+                kwargs.get("encoding", "utf-8"),
+                kwargs.get("create_dirs", True)
+            )
+        elif operation == "mkdir":
+            return await self.create_directory(path)
+        elif operation == "list":
+            return await self.list_directory(
+                path,
+                kwargs.get("recursive", False),
+                kwargs.get("include_hidden", False)
+            )
+        elif operation == "exists":
+            return await self.exists(path)
+        elif operation == "delete":
+            return await self.delete(path)
+        elif operation == "copy":
+            return await self.copy(path, kwargs.get("dest", ""))
+        elif operation == "move":
+            return await self.move(path, kwargs.get("dest", ""))
+        elif operation == "info":
+            return await self.get_file_info(path)
+        elif operation == "read_json":
+            return await self.read_json(path)
+        elif operation == "write_json":
+            return await self.write_json(path, kwargs.get("data", {}), kwargs.get("indent", 2))
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown operation: {operation}",
+                "path": path
+            }
+
     async def read_file(self, path: str, encoding: str = "utf-8") -> Dict[str, Any]:
         """Read a file"""
         full_path = self._get_full_path(path)

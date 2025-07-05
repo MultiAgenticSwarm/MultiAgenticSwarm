@@ -125,50 +125,81 @@ Your core responsibilities:
         """Register tools with MAS system using proper tool sharing"""
         tools = self._get_tools()
         for tool_def in tools:
-            # Tools are now defined as dictionaries with metadata
-            # The actual tool instances are provided by the system
             if isinstance(tool_def, dict):
-                # For dictionary format, we just note the tool requirements
-                # The actual tool registration happens in the system
-                pass
+                # Create MAS FunctionTool from dictionary definition
+                try:
+                    from multiagenticswarm.core.base_tool import FunctionTool
+
+                    mas_tool = FunctionTool(
+                        func=tool_def.get("func"),
+                        name=tool_def.get("name"),
+                        description=tool_def.get("description", ""),
+                        parameters=tool_def.get("parameters", {})
+                    )
+
+                    # Set tool sharing level
+                    scope = tool_def.get("scope", "local")
+                    if scope == "local":
+                        mas_tool.set_local(self)
+                    elif scope == "shared":
+                        # For shared tools, we need to specify which agents can use them
+                        # This will be handled by the swarm orchestrator
+                        pass
+                    elif scope == "global":
+                        mas_tool.set_global()
+
+                    # Register with MAS system
+                    self.mas_system.register_tool(mas_tool)
+
+                except Exception as e:
+                    self.logger.warning(f"Failed to register tool {tool_def.get('name', 'unknown')}: {e}")
             else:
-                # Handle legacy format - create MAS Tool from definition
-                mas_tool = mas.Tool(
-                    name=tool_def.get("name"),
-                    func=tool_def.get("func"),
-                    description=tool_def.get("description", ""),
-                    parameters=tool_def.get("parameters", {})
-                )
-
-                # Set tool sharing level
-                scope = tool_def.get("scope", "local")
-                if scope == "local":
-                    mas_tool.set_local(self)
-                elif scope == "shared":
-                    # For shared tools, we need to specify which agents can use them
-                    # This will be handled by the swarm orchestrator
-                    pass
-                elif scope == "global":
-                    mas_tool.set_global()
-
-                # Register with MAS system
-                self.mas_system.register_tool(mas_tool)
+                # Handle object format - assume it's already a proper MAS tool
+                if hasattr(tool_def, 'set_local'):
+                    tool_def.set_local(self)
+                self.mas_system.register_tool(tool_def)
 
     async def execute(
         self,
-        task: Union[str, Dict[str, Any]],
-        context: Optional[TaskContext] = None
-    ) -> ExecutionResult:
-        """Execute task using MAS infrastructure"""
+        task_or_input: Union[str, Dict[str, Any]] = None,
+        context: Optional[Union[TaskContext, Dict[str, Any]]] = None,
+        tool_executor: Optional[Any] = None,
+        available_tools: Optional[List[str]] = None,
+        tool_registry: Optional[Dict[str, Any]] = None,
+        # Support MAS system parameters
+        input_text: Optional[str] = None,
+        **kwargs
+    ) -> Union[ExecutionResult, Dict[str, Any]]:
+        """Execute task using MAS infrastructure with flexible signature"""
+
+        # Handle MAS system calls that use input_text parameter
+        if input_text is not None:
+            # This is a MAS system call - delegate to the parent class
+            return await super().execute(
+                input_text=input_text,
+                context=context if isinstance(context, dict) else (context.__dict__ if context else None),
+                tool_executor=tool_executor,
+                available_tools=available_tools,
+                tool_registry=tool_registry,
+                **kwargs
+            )
+
+        # Handle AgentSwarm-style calls
+        if task_or_input is None:
+            raise ValueError("Either task_or_input or input_text must be provided")
+
+        # This is an AgentSwarm call - handle as before
+        if isinstance(context, dict):
+            context = TaskContext(**context)
 
         if context:
             self.context = context
 
         # Convert task to proper format
-        if isinstance(task, str):
-            task_input = task
+        if isinstance(task_or_input, str):
+            task_input = task_or_input
         else:
-            task_input = task.get("description", str(task))
+            task_input = task_or_input.get("description", str(task_or_input))
 
         start_time = time.time()
 
@@ -176,7 +207,10 @@ Your core responsibilities:
             # Use MAS agent execution directly (we inherit from mas.Agent)
             result = await super().execute(
                 input_text=task_input,
-                context=context.__dict__ if context else None
+                context=context.__dict__ if context else None,
+                tool_executor=None,
+                available_tools=None,
+                tool_registry=None
             )
 
             execution_time = time.time() - start_time
@@ -188,7 +222,7 @@ Your core responsibilities:
                 task_id=f"{self.name}_task_{len(self.execution_history)}",
                 output=result,
                 execution_time=execution_time,
-                metadata={"task": task}
+                metadata={"task": task_or_input}
             )
 
             # Store in history
@@ -206,7 +240,7 @@ Your core responsibilities:
                 task_id=f"{self.name}_task_{len(self.execution_history)}",
                 error_message=str(e),
                 execution_time=execution_time,
-                metadata={"task": task}
+                metadata={"task": task_or_input}
             )
 
             self.execution_history.append(execution_result)
@@ -319,15 +353,18 @@ class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
         context: Optional[Dict[str, Any]] = None
     ) -> ExecutionResult:
         """Execute a workflow using MAS Task system"""
-        return await self.execute_task(workflow_name, context)
+        # Execute the task using the MAS system
+        task_result = await self.execute_task(workflow_name, context)
 
-        if context:
-            self.context = context
-
-        results = await workflow.run(self.context)
-        self.execution_history.extend(results)
-
-        return results
+        # Convert the result to ExecutionResult format
+        return ExecutionResult(
+            success=task_result.get('success', False),
+            agent_name="FlutterSwarm",
+            task_id=workflow_name,
+            output=task_result,
+            execution_time=task_result.get('execution_time', 0),
+            metadata=context or {}
+        )
 
     def get_execution_history(self) -> List[ExecutionResult]:
         """Get the execution history for the entire swarm"""

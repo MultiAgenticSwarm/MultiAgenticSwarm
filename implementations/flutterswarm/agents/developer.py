@@ -33,11 +33,18 @@ class FlutterDeveloperAgent(AbstractDeveloperAgent):
     def __init__(self, name: str = "flutter_developer", working_directory: str = ".", **kwargs):
         self.working_directory = working_directory
 
+        # Initialize tools first
+        self.flutter_cli = FlutterCLITool(working_directory)
+        self.dart_cli = DartCLITool(working_directory)
+        self.file_system = FileSystemTool(working_directory)
+
         # Initialize with proper MAS integration
         super().__init__(
             name=name,
-            working_directory=working_directory,
-            **kwargs
+            system=kwargs.get('system'),
+            llm_provider=kwargs.get('llm_provider', 'openai'),
+            llm_model=kwargs.get('llm_model', 'gpt-4'),
+            **{k: v for k, v in kwargs.items() if k not in ['system', 'llm_provider', 'llm_model']}
         )
 
         self.logger = mas.get_logger(f"flutterswarm.{name}")
@@ -137,165 +144,209 @@ Use these tools to execute the plans you create.
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:
-        """Get Flutter development tools - tools come from the system"""
+        """Get tools for this agent"""
         return [
             {
                 "name": "flutter_cli",
-                "description": "Execute Flutter CLI commands for project creation, building, running, and testing",
-                "scope": "global"
+                "func": self.flutter_cli.execute,
+                "description": "Execute Flutter CLI commands",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "The Flutter command to execute"},
+                        "args": {"type": "array", "items": {"type": "string"}, "description": "Command arguments"}
+                    },
+                    "required": ["command"]
+                },
+                "scope": "local"
             },
             {
                 "name": "dart_cli",
-                "description": "Execute Dart CLI commands for package management, analysis, and formatting",
-                "scope": "global"
+                "func": self.dart_cli.execute,
+                "description": "Execute Dart CLI commands",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string", "description": "The Dart command to execute"},
+                        "args": {"type": "array", "items": {"type": "string"}, "description": "Command arguments"}
+                    },
+                    "required": ["command"]
+                },
+                "scope": "local"
             },
             {
                 "name": "file_system",
-                "description": "File system operations for reading, writing, and managing project files",
-                "scope": "global"
+                "func": self.file_system.execute,
+                "description": "Execute file system operations (read, write, list, mkdir, etc.)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "operation": {
+                            "type": "string",
+                            "description": "The file system operation to perform",
+                            "enum": ["read", "write", "list", "mkdir", "exists", "delete", "copy", "move"]
+                        },
+                        "path": {"type": "string", "description": "The path to the file or directory"},
+                        "content": {"type": "string", "description": "The content to write to the file (for write operations)"},
+                        "encoding": {"type": "string", "description": "File encoding (default: utf-8)"},
+                        "create_dirs": {"type": "boolean", "description": "Whether to create parent directories (default: true)"}
+                    },
+                    "required": ["operation", "path"]
+                },
+                "scope": "local"
             }
         ]
 
-    async def implement_feature(self, feature_description: str, context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Implement a Flutter feature using LLM knowledge"""
+    async def generate_code(
+        self,
+        requirements: str,
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Generate code based on requirements"""
+        task = f"""
+        Generate Flutter code for these requirements:
+        {requirements}
 
-        prompt = f"""
-        Implement the following Flutter feature:
-        {feature_description}
+        Use your expert Flutter knowledge to:
+        1. Choose appropriate widgets and architecture
+        2. Follow Flutter best practices
+        3. Implement proper state management
+        4. Create clean, maintainable code
+        5. Include proper error handling
+        6. Add comprehensive documentation
 
-        Working directory: {self.working_directory}
-        Context: {context.__dict__ if context else 'No specific context'}
+        Consider:
+        - Material Design principles
+        - Performance optimization
+        - Platform-specific adaptations
+        - Accessibility features
+        - Testing requirements
+        """
 
-        Steps to follow:
+        return await self.execute(task, context)
+
+    async def implement_feature(
+        self,
+        feature_description: str,
+        project_context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Implement a complete feature using LLM reasoning"""
+        task = f"""
+        Implement Flutter feature: {feature_description}
+
+        Project context: {project_context.__dict__ if project_context else 'None'}
+
+        Steps:
         1. Analyze the feature requirements
-        2. Plan the implementation approach
+        2. Design the implementation approach
         3. Create necessary files and directories
-        4. Implement the feature using appropriate Flutter patterns
-        5. Test the implementation
-        6. Provide a summary of what was implemented
+        4. Implement the feature with proper architecture
+        5. Add error handling and edge cases
+        6. Include unit and widget tests
+        7. Update documentation
 
-        Use your Flutter expertise to make all technical decisions.
+        Follow Flutter conventions:
+        - Use appropriate state management
+        - Implement responsive design
+        - Add proper navigation
+        - Include accessibility features
+        - Optimize for performance
         """
 
-        return await self.execute(prompt, context)
+        return await self.execute(task, project_context)
 
-    async def create_widget(self, widget_description: str, context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Create a custom Flutter widget"""
+    async def refactor_code(
+        self,
+        code_path: str,
+        refactoring_goals: List[str],
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Refactor code using LLM analysis and decisions"""
+        task = f"""
+        Refactor Flutter code at: {code_path}
 
-        prompt = f"""
-        Create a custom Flutter widget:
-        {widget_description}
+        Refactoring goals: {refactoring_goals}
 
-        Requirements:
-        1. Use appropriate widget type (StatelessWidget or StatefulWidget)
-        2. Follow Flutter widget composition patterns
-        3. Include proper documentation
-        4. Handle edge cases and errors
-        5. Consider performance implications
-        6. Make it reusable and configurable
+        Approach:
+        1. Analyze current code structure
+        2. Identify improvement opportunities
+        3. Apply Flutter best practices
+        4. Improve performance and maintainability
+        5. Update tests accordingly
+        6. Document changes
 
-        Implement the widget in the appropriate file location.
+        Focus on:
+        - Code organization and structure
+        - Performance optimizations
+        - Maintainability improvements
+        - Design pattern applications
+        - Testing coverage
         """
 
-        return await self.execute(prompt, context)
+        return await self.execute(task, context)
 
-    async def setup_project_structure(self, project_type: str, context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Setup Flutter project structure"""
+    async def debug_issue(
+        self,
+        issue_description: str,
+        error_logs: Optional[List[str]] = None,
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Debug and fix issues using LLM analysis"""
+        task = f"""
+        Debug Flutter issue: {issue_description}
 
-        prompt = f"""
-        Setup a Flutter project structure for: {project_type}
+        Error logs: {error_logs or 'None provided'}
 
-        Working directory: {self.working_directory}
+        Debug process:
+        1. Analyze the issue description and logs
+        2. Identify potential root causes
+        3. Investigate code paths
+        4. Propose solutions
+        5. Implement fixes
+        6. Test the fixes
+        7. Prevent similar issues
 
-        Tasks:
-        1. Create appropriate folder structure
-        2. Setup pubspec.yaml with necessary dependencies
-        3. Create main entry point
-        4. Setup routing structure
-        5. Create basic theme configuration
-        6. Setup development environment files
-        7. Create example screens/widgets for the project type
-
-        Use Flutter best practices for project organization.
+        Consider:
+        - Flutter-specific debugging techniques
+        - Platform-specific issues
+        - Performance implications
+        - State management problems
+        - Widget lifecycle issues
         """
 
-        return await self.execute(prompt, context)
+        return await self.execute(task, context)
 
-    async def optimize_performance(self, target_area: str, context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Optimize Flutter app performance"""
+    async def optimize_performance(
+        self,
+        performance_targets: Dict[str, Any],
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Optimize code performance using LLM analysis"""
+        task = f"""
+        Optimize Flutter performance for targets: {performance_targets}
 
-        prompt = f"""
-        Optimize Flutter app performance in: {target_area}
+        Optimization areas:
+        1. Widget build optimization
+        2. State management efficiency
+        3. Memory usage reduction
+        4. Animation performance
+        5. Network request optimization
+        6. Asset loading optimization
 
-        Areas to analyze and optimize:
-        1. Widget rebuild optimization
-        2. Memory usage optimization
-        3. Build time optimization
-        4. Runtime performance
-        5. Bundle size optimization
-        6. Asset optimization
+        Analysis:
+        1. Profile current performance
+        2. Identify bottlenecks
+        3. Apply Flutter performance best practices
+        4. Implement optimizations
+        5. Measure improvements
+        6. Document changes
 
-        Provide specific recommendations and implement the optimizations.
+        Focus on:
+        - Build method optimization
+        - Unnecessary rebuilds prevention
+        - Memory leak detection
+        - Efficient state management
+        - Image and asset optimization
         """
 
-        return await self.execute(prompt, context)
-
-    async def implement_state_management(self, pattern: str, context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Implement state management pattern"""
-
-        prompt = f"""
-        Implement {pattern} state management pattern in Flutter.
-
-        Tasks:
-        1. Setup the state management architecture
-        2. Create necessary models and state classes
-        3. Implement state management logic
-        4. Create example usage in widgets
-        5. Setup dependency injection if needed
-        6. Add proper error handling
-        7. Document the implementation
-
-        Follow best practices for the chosen pattern.
-        """
-
-        return await self.execute(prompt, context)
-
-    async def create_responsive_ui(self, design_specs: str, context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Create responsive UI for multiple screen sizes"""
-
-        prompt = f"""
-        Create responsive Flutter UI based on: {design_specs}
-
-        Requirements:
-        1. Support mobile, tablet, and desktop layouts
-        2. Use appropriate responsive design patterns
-        3. Implement adaptive widgets for different platforms
-        4. Handle orientation changes
-        5. Optimize for accessibility
-        6. Use appropriate breakpoints
-        7. Implement smooth animations and transitions
-
-        Create production-ready responsive UI implementation.
-        """
-
-        return await self.execute(prompt, context)
-
-    async def integrate_platform_features(self, platform_features: List[str], context: Optional[TaskContext] = None) -> ExecutionResult:
-        """Integrate platform-specific features"""
-
-        prompt = f"""
-        Integrate the following platform features: {', '.join(platform_features)}
-
-        Tasks:
-        1. Identify required packages and dependencies
-        2. Setup platform-specific configurations
-        3. Implement feature integration code
-        4. Handle platform differences (iOS/Android)
-        5. Add proper permission handling
-        6. Implement error handling and fallbacks
-        7. Test integration on different platforms
-
-        Ensure robust cross-platform implementation.
-        """
-
-        return await self.execute(prompt, context)
+        return await self.execute(task, context)

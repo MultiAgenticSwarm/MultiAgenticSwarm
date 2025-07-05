@@ -62,14 +62,14 @@ import multiagenticswarm as mas
 mas.setup_logging(verbose=True)
 
 # Create agents with different LLMs
-agent1 = mas.Agent("DataAnalyst", 
+agent1 = mas.Agent("DataAnalyst",
                    system_prompt="You are a data analyst specialized in extracting insights from data",
                    llm_provider="openai",
                    llm_model="gpt-4")
 
 agent2 = mas.Agent("ActionExecutor",
                    system_prompt="You execute actions based on data analysis",
-                   llm_provider="anthropic", 
+                   llm_provider="anthropic",
                    llm_model="claude-3.5-sonnet")
 
 # Define actual functions for tools
@@ -87,7 +87,7 @@ def log_message(msg):
     return f"Logged: {msg}"
 
 # Create tools with different sharing levels
-local_tool = mas.Tool("DataFetcher", 
+local_tool = mas.Tool("DataFetcher",
                       func=fetch_data,
                       description="Fetches data from external sources")
 local_tool.set_local(agent1)
@@ -97,13 +97,13 @@ shared_tool = mas.Tool("DataProcessor",
                        description="Processes and analyzes data")
 shared_tool.set_shared(agent1, agent2)
 
-global_tool = mas.Tool("Logger", 
+global_tool = mas.Tool("Logger",
                        func=log_message,
                        description="Logs messages to console")
 global_tool.set_global()
 
 # Create collaborative tasks
-task = mas.Task("AnalyzeAndAct", 
+task = mas.Task("AnalyzeAndAct",
                 description="Analyze data and execute actions",
                 steps=[
                     {"agent": "DataAnalyst", "tool": "DataFetcher", "input": "get latest market data"},
@@ -113,7 +113,7 @@ task = mas.Task("AnalyzeAndAct",
                 ])
 
 # Create event-driven automation
-trigger = mas.Trigger("DataAvailable", 
+trigger = mas.Trigger("DataAvailable",
                       condition=lambda event: event.get("type") == "data_ready")
 automation = mas.Automation("AutoAnalyze", trigger=trigger, task=task)
 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     # Run a single task
     result = system.execute_task("AnalyzeAndAct")
     print(f"Task result: {result}")
-    
+
     # Or run the full system with automations
     system.run()
 ```
@@ -144,8 +144,8 @@ agents:
     system_prompt: "You are an expert data analyst"
     llm_provider: "openai"
     llm_model: "gpt-4"
-  
-  - name: "ActionExecutor" 
+
+  - name: "ActionExecutor"
     description: "Executes business actions"
     system_prompt: "You execute actions based on analysis"
     llm_provider: "anthropic"
@@ -156,12 +156,12 @@ tools:
     description: "Fetches data from APIs"
     scope: "local"
     agents: ["DataAnalyst"]
-    
+
   - name: "DataProcessor"
     description: "Processes and transforms data"
-    scope: "shared" 
+    scope: "shared"
     agents: ["DataAnalyst", "ActionExecutor"]
-    
+
   - name: "Logger"
     description: "System logger"
     scope: "global"
@@ -171,7 +171,7 @@ tasks:
     description: "Complete analysis and action workflow"
     steps:
       - agent: "DataAnalyst"
-        tool: "DataFetcher" 
+        tool: "DataFetcher"
         input: "fetch latest sales data"
       - agent: "DataAnalyst"
         tool: "DataProcessor"
@@ -186,7 +186,7 @@ tasks:
 triggers:
   - name: "OnDataUpdate"
     condition: "event.type == 'data_update'"
-    
+
 automations:
   - trigger: "OnDataUpdate"
     task: "AnalyzeAndAct"
@@ -211,7 +211,7 @@ python simple_example.py
 ```
 A basic demonstration showing agent collaboration and tool sharing.
 
-### 🚀 Complete Example  
+### 🚀 Complete Example
 ```bash
 python complete_example.py
 ```
@@ -238,7 +238,7 @@ Demonstrates using MultiAgenticSwarm for Flutter app development.
 from multiagenticswarm import Trigger, Automation
 
 # Define triggers
-email_trigger = Trigger("OnEmailReceived", 
+email_trigger = Trigger("OnEmailReceived",
                        condition=lambda event: event.type == "email")
 
 # Create automations
@@ -255,7 +255,7 @@ def custom_api_call(endpoint: str, data: dict) -> dict:
     # Your custom logic here
     return {"result": "success"}
 
-api_tool = Tool("CustomAPI", 
+api_tool = Tool("CustomAPI",
                func=custom_api_call,
                description="Calls custom API endpoints")
 api_tool.set_shared(agent1, agent2)
@@ -297,7 +297,7 @@ system = mas.System(enable_logging=True, verbose=True)
 
 # Register components in order
 system.register_agents(*agents)      # Agents first
-system.register_tools(*tools)        # Then tools  
+system.register_tools(*tools)        # Then tools
 system.register_tasks(*tasks)        # Then tasks
 system.register_automations(*autos)  # Finally automations
 

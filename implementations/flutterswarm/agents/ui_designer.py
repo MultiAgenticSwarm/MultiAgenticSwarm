@@ -12,9 +12,8 @@ from ..tools import FlutterCLITool, DartCLITool, FileSystemTool
 
 # Import MAS as the core SDK
 import multiagenticswarm as mas
-from multiagenticswarm.core.agent import Agent
 
-class FlutterUIDesignerAgent(AbstractDeveloperAgent, Agent):
+class FlutterUIDesignerAgent(AbstractDeveloperAgent):
     """
     Flutter UI Designer agent - ALL UI design knowledge comes from LLM.
     No hardcoded UI patterns, themes, or design decisions.
@@ -31,14 +30,23 @@ class FlutterUIDesignerAgent(AbstractDeveloperAgent, Agent):
 
     def __init__(self, name: str = "flutter_ui_designer", working_directory: str = ".", **kwargs):
         self.working_directory = working_directory
-        super().__init__(name=name, **kwargs)
 
-        # Initialize tools
+        # Initialize tools first
         self.flutter_cli = FlutterCLITool(working_directory)
         self.dart_cli = DartCLITool(working_directory)
         self.file_system = FileSystemTool(working_directory)
 
-        self.logger = logging.getLogger(f"flutterswarm.{name}")
+        # Initialize with proper MAS integration
+        super().__init__(
+            name=name,
+            system=kwargs.get('system'),
+            llm_provider=kwargs.get('llm_provider', 'openai'),
+            llm_model=kwargs.get('llm_model', 'gpt-4'),
+            **{k: v for k, v in kwargs.items() if k not in ['system', 'llm_provider', 'llm_model']}
+        )
+
+        self.logger = mas.get_logger(f"flutterswarm.{name}")
+        self.logger.info(f"Initialized FlutterUIDesignerAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
         """UI Designer specific instructions"""
@@ -128,25 +136,178 @@ You have access to Flutter CLI, Dart CLI, and file system tools.
 Use these to implement your UI designs.
 """
 
-    def _get_tools(self) -> List[Any]:
-        """Get tools for UI design"""
+    def _get_tools(self) -> List[Dict[str, Any]]:
+        """Get tools for this agent"""
         return [
-            mas.Tool(
-                name="flutter_cli",
-                description="Execute Flutter CLI commands",
-                function=self.flutter_cli.execute
-            ),
-            mas.Tool(
-                name="dart_cli",
-                description="Execute Dart CLI commands",
-                function=self.dart_cli.execute
-            ),
-            mas.Tool(
-                name="file_system",
-                description="File system operations",
-                function=self.file_system._execute_wrapper
-            )
+            {
+                "name": "flutter_cli",
+                "func": self.flutter_cli.execute,
+                "description": "Execute Flutter CLI commands",
+                "scope": "local"
+            },
+            {
+                "name": "dart_cli",
+                "func": self.dart_cli.execute,
+                "description": "Execute Dart CLI commands",
+                "scope": "local"
+            },
+            {
+                "name": "file_system",
+                "func": self.file_system.execute,
+                "description": "Execute file system operations (read, write, list, mkdir, etc.)",
+                "scope": "local"
+            }
         ]
+
+    async def generate_code(
+        self,
+        requirements: str,
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Generate UI code based on requirements"""
+        task = f"""
+        Generate Flutter UI code for: {requirements}
+
+        Focus on:
+        1. Beautiful and intuitive user interface
+        2. Material Design 3 principles
+        3. Responsive design patterns
+        4. Accessibility features
+        5. Smooth animations and transitions
+        6. Consistent theming
+        7. Performance optimization
+
+        Create:
+        - Custom widgets as needed
+        - Proper layout structures
+        - Theme configuration
+        - Animation implementations
+        - Accessibility features
+        - Platform adaptations
+        """
+
+        return await self.execute(task, context)
+
+    async def implement_feature(
+        self,
+        feature_description: str,
+        project_context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Implement UI feature using LLM reasoning"""
+        task = f"""
+        Implement Flutter UI feature: {feature_description}
+
+        Project context: {project_context.__dict__ if project_context else 'None'}
+
+        Design approach:
+        1. Analyze UI requirements
+        2. Create design mockups (described)
+        3. Implement responsive layouts
+        4. Add smooth animations
+        5. Ensure accessibility
+        6. Optimize performance
+        7. Create reusable components
+
+        Consider:
+        - Material Design guidelines
+        - Platform-specific adaptations
+        - Different screen sizes
+        - Dark mode support
+        - Accessibility requirements
+        """
+
+        return await self.execute(task, project_context)
+
+    async def refactor_code(
+        self,
+        code_path: str,
+        refactoring_goals: List[str],
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Refactor UI code using LLM analysis"""
+        task = f"""
+        Refactor Flutter UI code at: {code_path}
+
+        Refactoring goals: {refactoring_goals}
+
+        UI refactoring focus:
+        1. Improve widget composition
+        2. Enhance performance
+        3. Better responsive design
+        4. Cleaner theming
+        5. Improved accessibility
+        6. Better animations
+        7. More maintainable code
+
+        Apply:
+        - Widget extraction and reuse
+        - Performance optimizations
+        - Better state management
+        - Improved layouts
+        - Enhanced theming
+        """
+
+        return await self.execute(task, context)
+
+    async def debug_issue(
+        self,
+        issue_description: str,
+        error_logs: Optional[List[str]] = None,
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Debug UI issues using LLM analysis"""
+        task = f"""
+        Debug Flutter UI issue: {issue_description}
+
+        Error logs: {error_logs or 'None provided'}
+
+        UI debugging focus:
+        1. Widget tree analysis
+        2. Layout issues
+        3. Performance problems
+        4. Animation glitches
+        5. Theming inconsistencies
+        6. Accessibility problems
+        7. Platform-specific issues
+
+        Provide:
+        - Root cause analysis
+        - Step-by-step fixes
+        - Prevention strategies
+        - Performance improvements
+        - Testing recommendations
+        """
+
+        return await self.execute(task, context)
+
+    async def optimize_performance(
+        self,
+        performance_targets: Dict[str, Any],
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Optimize UI performance using LLM analysis"""
+        task = f"""
+        Optimize Flutter UI performance for: {performance_targets}
+
+        UI optimization areas:
+        1. Widget build optimization
+        2. Animation performance
+        3. Layout efficiency
+        4. Memory usage reduction
+        5. Image loading optimization
+        6. Scrolling performance
+        7. Custom painter optimization
+
+        Strategies:
+        - Const constructors usage
+        - Widget caching
+        - Efficient layouts
+        - Animation optimization
+        - Asset optimization
+        - Memory management
+        """
+
+        return await self.execute(task, context)
 
     async def design_ui(
         self,
@@ -154,303 +315,124 @@ Use these to implement your UI designs.
         design_constraints: Dict[str, Any],
         context: Optional[TaskContext] = None
     ) -> ExecutionResult:
+        """Design UI using LLM analysis"""
+        task = f"""
+        Design Flutter UI for: {ui_requirements}
+
+        Design constraints: {design_constraints}
+
+        Create:
+        1. UI/UX design specification
+        2. Widget hierarchy design
+        3. Layout structure
+        4. Color and typography scheme
+        5. Animation specifications
+        6. Responsive design strategy
+        7. Accessibility considerations
+
+        Focus on:
+        - User experience excellence
+        - Visual hierarchy
+        - Consistency and patterns
+        - Performance considerations
+        - Platform guidelines
         """
-        Design complete UI using LLM knowledge.
-        """
 
-        # Get current project context
-        project_structure = await self.file_system.list_directory(
-            path=self.working_directory,
-            recursive=True
-        )
-
-        # Read current theme if exists
-        theme_files = []
-        for file in project_structure.get('files', []):
-            if 'theme' in file.lower() or 'style' in file.lower():
-                theme_content = await self.file_system.read_file(file)
-                if theme_content.get('success'):
-                    theme_files.append({
-                        'path': file,
-                        'content': theme_content['content']
-                    })
-
-        design_prompt = f"""
-Design a complete Flutter UI for these requirements:
-{ui_requirements}
-
-Design constraints:
-{design_constraints}
-
-Current project context:
-- Project structure: {project_structure.get('files', []) if project_structure.get('success') else 'New project'}
-- Existing themes: {theme_files if theme_files else 'None'}
-- Target platforms: {context.target_platforms if context else ['iOS', 'Android']}
-
-Create a comprehensive UI design:
-
-1. UI_ANALYSIS: Analyze requirements and identify UI components needed
-2. DESIGN_SYSTEM: Define colors, typography, spacing, and overall design system
-3. WIDGET_HIERARCHY: Plan widget structure and composition
-4. RESPONSIVE_STRATEGY: Plan responsive design approach
-5. ANIMATION_PLAN: Plan animations and transitions
-6. ACCESSIBILITY_CONSIDERATIONS: Plan accessibility features
-7. IMPLEMENTATION: Complete Flutter UI implementation
-
-Provide:
-- Complete widget implementations
-- Theme and styling code
-- Animation implementations
-- Responsive design code
-- Accessibility features
-- File structure for UI components
-
-Base all design decisions on:
-- Material Design 3 principles (for Android)
-- Cupertino design patterns (for iOS)
-- Best UI/UX practices
-- Flutter widget best practices
-- Performance considerations
-- Accessibility guidelines
-
-Generate production-ready, beautiful UI code.
-"""
-
-        # Get LLM design
-        design_result = await self.execute(design_prompt, context)
-
-        if not design_result.success:
-            return design_result
-
-        # Extract and implement the design
-        llm_response = design_result.output
-
-        # Extract UI components from response
-        ui_files = self._extract_ui_files_from_response(llm_response)
-        theme_updates = self._extract_theme_updates_from_response(llm_response)
-
-        created_files = []
-
-        # Create UI component files
-        for file_info in ui_files:
-            result = await self.file_system.write_file(
-                path=file_info['path'],
-                content=file_info['content'],
-                create_dirs=True
-            )
-
-            if result.get('success'):
-                created_files.append(file_info['path'])
-                self.logger.info(f"Created UI file: {file_info['path']}")
-
-        # Update theme files
-        for theme_update in theme_updates:
-            result = await self.file_system.write_file(
-                path=theme_update['path'],
-                content=theme_update['content'],
-                create_dirs=True
-            )
-
-            if result.get('success'):
-                created_files.append(theme_update['path'])
-                self.logger.info(f"Updated theme file: {theme_update['path']}")
-
-        return ExecutionResult(
-            success=True,
-            agent_name=self.name,
-            task_id=f"design_ui_{len(self.execution_history)}",
-            output={
-                'design_analysis': llm_response,
-                'created_files': created_files,
-                'ui_components': ui_files,
-                'theme_updates': theme_updates
-            },
-            created_files=created_files,
-            next_steps=[
-                "Review the UI design implementation",
-                "Test UI on different screen sizes",
-                "Verify accessibility features",
-                "Test animations and transitions",
-                "Validate design consistency"
-            ]
-        )
+        return await self.execute(task, context)
 
     async def create_theme(
         self,
         brand_guidelines: Dict[str, Any],
         context: Optional[TaskContext] = None
     ) -> ExecutionResult:
+        """Create theme based on brand guidelines"""
+        task = f"""
+        Create Flutter theme from brand guidelines: {brand_guidelines}
+
+        Generate:
+        1. Complete ThemeData configuration
+        2. Color scheme (light and dark)
+        3. Typography system
+        4. Component themes
+        5. Custom widget themes
+        6. Animation themes
+        7. Platform adaptations
+
+        Ensure:
+        - Brand consistency
+        - Accessibility compliance
+        - Performance optimization
+        - Maintainability
+        - Extensibility
         """
-        Create a comprehensive Flutter theme.
-        """
 
-        theme_prompt = f"""
-Create a comprehensive Flutter theme based on these brand guidelines:
-{brand_guidelines}
-
-Project context: {context.__dict__ if context else 'None'}
-
-Create:
-1. THEME_ANALYSIS: Analyze brand guidelines and define theme strategy
-2. COLOR_SCHEME: Define primary, secondary, and accent colors
-3. TYPOGRAPHY: Define text styles and font hierarchy
-4. COMPONENT_THEMES: Define themes for all Flutter components
-5. DARK_THEME: Create dark mode variant
-6. THEME_IMPLEMENTATION: Complete Flutter theme code
-
-Provide:
-- Complete ThemeData implementation
-- Color scheme definitions
-- Typography themes
-- Component-specific themes
-- Dark mode support
-- Theme switching functionality
-
-Base the theme on:
-- Material Design 3 color system
-- Brand guidelines and identity
-- Accessibility requirements
-- Platform conventions
-- User experience best practices
-
-Generate production-ready theme code.
-"""
-
-        return await self.execute(theme_prompt, context)
+        return await self.execute(task, context)
 
     async def create_animations(
         self,
         animation_requirements: List[str],
         context: Optional[TaskContext] = None
     ) -> ExecutionResult:
+        """Create animations based on requirements"""
+        task = f"""
+        Create Flutter animations for: {animation_requirements}
+
+        Implement:
+        1. Custom animation controllers
+        2. Smooth transitions
+        3. Micro-interactions
+        4. Page transitions
+        5. Loading animations
+        6. Gesture-based animations
+        7. Performance-optimized animations
+
+        Focus on:
+        - Smooth 60fps performance
+        - Natural motion curves
+        - Accessibility considerations
+        - Battery efficiency
+        - Memory optimization
         """
-        Create Flutter animations using LLM knowledge.
-        """
 
-        animation_prompt = f"""
-Create Flutter animations for these requirements:
-{animation_requirements}
-
-Project context: {context.__dict__ if context else 'None'}
-
-Create:
-1. ANIMATION_ANALYSIS: Analyze requirements and plan animation approach
-2. ANIMATION_STRATEGY: Choose appropriate animation techniques
-3. PERFORMANCE_CONSIDERATIONS: Plan for smooth, performant animations
-4. IMPLEMENTATION: Complete animation code
-
-Provide:
-- Animation controller implementations
-- Tween and curve definitions
-- Custom animation widgets
-- Performance optimizations
-- Usage examples
-
-Use appropriate Flutter animation techniques:
-- Implicit animations for simple cases
-- Explicit animations for complex scenarios
-- Hero animations for navigation
-- Custom animations for unique effects
-- Optimized animations for performance
-
-Generate smooth, beautiful animations.
-"""
-
-        return await self.execute(animation_prompt, context)
+        return await self.execute(task, context)
 
     async def optimize_ui_performance(
         self,
         performance_issues: List[str],
         context: Optional[TaskContext] = None
     ) -> ExecutionResult:
+        """Optimize UI performance for specific issues"""
+        task = f"""
+        Optimize Flutter UI performance for issues: {performance_issues}
+
+        Address:
+        1. Rendering bottlenecks
+        2. Widget rebuild optimization
+        3. Memory leaks
+        4. Animation performance
+        5. Layout efficiency
+        6. Asset optimization
+        7. Platform-specific optimizations
+
+        Provide:
+        - Specific optimizations
+        - Performance measurements
+        - Best practices
+        - Monitoring strategies
+        - Long-term maintenance
         """
-        Optimize UI performance using LLM analysis.
-        """
 
-        optimization_prompt = f"""
-Optimize Flutter UI performance for these issues:
-{performance_issues}
-
-Project context: {context.__dict__ if context else 'None'}
-
-Analyze and optimize:
-1. PERFORMANCE_ANALYSIS: Identify performance bottlenecks
-2. OPTIMIZATION_STRATEGY: Plan optimization approach
-3. WIDGET_OPTIMIZATIONS: Optimize widget usage
-4. RENDERING_OPTIMIZATIONS: Optimize rendering performance
-5. MEMORY_OPTIMIZATIONS: Optimize memory usage
-
-Apply Flutter UI performance best practices:
-- Const constructors for immutable widgets
-- RepaintBoundary for expensive widgets
-- ListView.builder for large lists
-- Image optimization and caching
-- Animation performance optimization
-- Widget tree optimization
-- Memory leak prevention
-
-Provide specific optimization recommendations and code changes.
-"""
-
-        return await self.execute(optimization_prompt, context)
+        return await self.execute(task, context)
 
     # Helper methods
     def _extract_ui_files_from_response(self, response: str) -> List[Dict[str, str]]:
         """Extract UI files from LLM response"""
-        # Similar to the developer agent's file extraction
-        files = []
-
-        lines = response.split('\n')
-        current_file = None
-        current_content = []
-
-        for line in lines:
-            if line.strip().startswith('UI_FILE:') or line.strip().startswith('WIDGET:'):
-                if current_file:
-                    files.append({
-                        'path': current_file,
-                        'content': '\n'.join(current_content)
-                    })
-
-                current_file = line.split(':', 1)[1].strip()
-                current_content = []
-            elif current_file and line.strip():
-                current_content.append(line)
-
-        if current_file:
-            files.append({
-                'path': current_file,
-                'content': '\n'.join(current_content)
-            })
-
-        return files
+        # This would parse the LLM response to extract UI files
+        # For now, return empty list
+        return []
 
     def _extract_theme_updates_from_response(self, response: str) -> List[Dict[str, str]]:
         """Extract theme updates from LLM response"""
-        # Similar extraction for theme files
-        themes = []
-
-        lines = response.split('\n')
-        current_theme = None
-        current_content = []
-
-        for line in lines:
-            if line.strip().startswith('THEME:') or line.strip().startswith('STYLE:'):
-                if current_theme:
-                    themes.append({
-                        'path': current_theme,
-                        'content': '\n'.join(current_content)
-                    })
-
-                current_theme = line.split(':', 1)[1].strip()
-                current_content = []
-            elif current_theme and line.strip():
-                current_content.append(line)
-
-        if current_theme:
-            themes.append({
-                'path': current_theme,
-                'content': '\n'.join(current_content)
-            })
-
-        return themes
+        # This would parse the LLM response to extract theme updates
+        # For now, return empty list
+        return []

@@ -15,6 +15,8 @@ except ImportError:
     MAS_AVAILABLE = False
     mas = None
     FunctionTool = None
+    mas = None
+    FunctionTool = None
 
 
 class FlutterCLITool:
@@ -48,6 +50,49 @@ class FlutterCLITool:
                 cmd.append(f"--{key}={value}")
 
         self.logger.info(f"Executing Flutter command: {' '.join(cmd)}")
+
+        try:
+            # Execute in working directory
+            result = subprocess.run(
+                cmd,
+                cwd=self.working_directory,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+
+            response = {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "return_code": result.returncode,
+                "command": " ".join(cmd)
+            }
+
+            if response["success"]:
+                self.logger.info(f"Flutter command succeeded: {response['command']}")
+            else:
+                self.logger.error(f"Flutter command failed: {response['command']}, error: {response['stderr']}")
+
+            return response
+
+        except subprocess.TimeoutExpired:
+            error_response = {
+                "success": False,
+                "error": "Command timed out",
+                "command": " ".join(cmd)
+            }
+            self.logger.error(f"Flutter command timed out: {error_response['command']}")
+            return error_response
+
+        except Exception as e:
+            error_response = {
+                "success": False,
+                "error": str(e),
+                "command": " ".join(cmd)
+            }
+            self.logger.error(f"Flutter command exception: {error_response['command']}, error: {str(e)}")
+            return error_response
 
         try:
             # Execute in working directory
