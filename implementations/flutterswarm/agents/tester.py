@@ -19,13 +19,13 @@ class FlutterTesterAgent(AbstractTesterAgent):
     No hardcoded testing patterns - all knowledge comes from LLM.
     """
 
-    def __init__(self, name: str = "flutter_tester", working_directory: str = ".", **kwargs):
+    def __init__(self, name: str = "flutter_tester", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
         self.working_directory = working_directory
 
-        # Initialize tools first
-        self.flutter_cli = FlutterCLITool(working_directory)
-        self.dart_cli = DartCLITool(working_directory)
-        self.file_system = FileSystemTool(working_directory)
+        # Use shared tool instances if provided
+        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
+        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
 
         # Initialize with proper MAS integration
         super().__init__(
@@ -298,6 +298,36 @@ Use these to implement and run your tests.
         """
 
         return await self.execute(task, context)
+
+    async def create_integration_tests(self, context: TaskContext) -> ExecutionResult:
+        """Agent creates comprehensive Flutter integration tests using LLM and tools."""
+        self.logger.info("Creating integration tests...")
+        try:
+            # LLM decides test strategy
+            test_strategy = await self.llm_provider.generate_response(
+                f"Design a comprehensive test strategy for Flutter app: {context.project_path}"
+            )
+            results = []
+            for test_type in test_strategy.get('test_types', []):
+                test_code = await self.llm_provider.generate_response(
+                    f"Generate {test_type} test code for Flutter app at {context.project_path}"
+                )
+                file_path = f"test/{test_type}_test.dart"
+                await self.file_system.create_file(file_path, test_code)
+                results.append(file_path)
+            # Run tests
+            test_results = await self.flutter_cli.execute("test", ["--coverage"])
+            analysis = await self.llm_provider.generate_response(
+                f"Analyze Flutter test results: {test_results.get('output')}"
+            )
+            return ExecutionResult(success=True, result={
+                "test_files": results,
+                "test_results": test_results.get('output'),
+                "analysis": analysis
+            })
+        except Exception as e:
+            self.logger.error(f"Integration test creation failed: {e}")
+            return ExecutionResult(success=False, error=str(e))
 
     # Helper methods
     def _extract_test_files_from_response(self, response: str) -> List[Dict[str, str]]:

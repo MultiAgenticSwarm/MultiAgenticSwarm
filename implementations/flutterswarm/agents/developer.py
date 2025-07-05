@@ -30,13 +30,13 @@ class FlutterDeveloperAgent(AbstractDeveloperAgent):
     - Performance optimizations
     """
 
-    def __init__(self, name: str = "flutter_developer", working_directory: str = ".", **kwargs):
+    def __init__(self, name: str = "flutter_developer", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
         self.working_directory = working_directory
 
-        # Initialize tools first
-        self.flutter_cli = FlutterCLITool(working_directory)
-        self.dart_cli = DartCLITool(working_directory)
-        self.file_system = FileSystemTool(working_directory)
+        # Use shared tool instances if provided
+        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
+        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
 
         # Initialize with proper MAS integration
         super().__init__(
@@ -350,3 +350,48 @@ Use these tools to execute the plans you create.
         """
 
         return await self.execute(task, context)
+
+    async def setup_project_structure(self, context: TaskContext) -> ExecutionResult:
+        """Agent determines optimal Flutter project structure and sets it up, including running 'flutter create'."""
+        self.logger.info("Setting up project structure...")
+        try:
+            # Validate project name
+            project_name = getattr(context, 'project_name', None) or getattr(context, 'app_name', None) or "my_flutter_app"
+            platforms = getattr(context, 'platforms', None) or ["ios", "android"]
+            # Call flutter_cli.create_project to bootstrap the project
+            create_result = await self.flutter_cli.create_project(
+                project_name=project_name,
+                platforms=platforms
+            )
+            if not create_result.get("success", False):
+                self.logger.error(f"flutter create failed: {create_result.get('error')}")
+                return ExecutionResult(success=False, error=create_result.get("error"))
+            # LLM decides what directories are needed (optional, after flutter create)
+            structure_plan = await self.llm_provider.generate_response(
+                f"What additional directory structure is needed for a Flutter project with requirements: {getattr(context, 'requirements', '')}"
+            )
+            for directory in structure_plan.get('directories', []):
+                await self.file_system.create_directory(directory)
+            return ExecutionResult(success=True, result={"structure_plan": structure_plan, "flutter_create": create_result})
+        except Exception as e:
+            self.logger.error(f"Project structure setup failed: {e}")
+            return ExecutionResult(success=False, error=str(e))
+
+    async def validate_dependencies(self, dependencies: List[str], context: TaskContext) -> ExecutionResult:
+        """Agent validates Flutter dependencies using LLM knowledge and Dart CLI."""
+        self.logger.info(f"Validating dependencies: {dependencies}")
+        try:
+            validation_plan = await self.llm_provider.generate_response(
+                f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed?"
+            )
+            results = {}
+            for dependency in dependencies:
+                pub_info = await self.dart_cli.execute("pub", ["deps", dependency])
+                compatibility = await self.llm_provider.generate_response(
+                    f"Is {dependency} compatible? pub info: {pub_info.get('output')}"
+                )
+                results[dependency] = compatibility
+            return ExecutionResult(success=True, result=results)
+        except Exception as e:
+            self.logger.error(f"Dependency validation failed: {e}")
+            return ExecutionResult(success=False, error=str(e))

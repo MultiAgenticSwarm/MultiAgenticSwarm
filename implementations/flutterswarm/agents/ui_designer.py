@@ -28,13 +28,13 @@ class FlutterUIDesignerAgent(AbstractDeveloperAgent):
     - Theming and styling
     """
 
-    def __init__(self, name: str = "flutter_ui_designer", working_directory: str = ".", **kwargs):
+    def __init__(self, name: str = "flutter_ui_designer", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
         self.working_directory = working_directory
 
-        # Initialize tools first
-        self.flutter_cli = FlutterCLITool(working_directory)
-        self.dart_cli = DartCLITool(working_directory)
-        self.file_system = FileSystemTool(working_directory)
+        # Use shared tool instances if provided
+        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
+        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
 
         # Initialize with proper MAS integration
         super().__init__(

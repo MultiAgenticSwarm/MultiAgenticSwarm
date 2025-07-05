@@ -19,13 +19,13 @@ class FlutterArchitectAgent(AbstractArchitectAgent):
     No hardcoded architectural patterns - all knowledge comes from LLM.
     """
 
-    def __init__(self, name: str = "flutter_architect", working_directory: str = ".", **kwargs):
+    def __init__(self, name: str = "flutter_architect", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
         self.working_directory = working_directory
 
-        # Initialize tools first
-        self.flutter_cli = FlutterCLITool(working_directory)
-        self.dart_cli = DartCLITool(working_directory)
-        self.file_system = FileSystemTool(working_directory)
+        # Use shared tool instances if provided
+        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
+        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
 
         # Initialize with proper MAS integration
         super().__init__(
@@ -356,6 +356,31 @@ Use these to implement your architectural designs.
         """
 
         return await self.execute(task, context)
+
+    async def verify_flutter_environment(self, context: TaskContext) -> ExecutionResult:
+        """Agent uses LLM knowledge to determine Flutter environment requirements and verify them."""
+        self.logger.info("Verifying Flutter environment...")
+        try:
+            # LLM decides what checks are needed (simulate with prompt)
+            verification_plan = await self.llm_provider.generate_response(
+                "What steps are needed to verify a Flutter development environment is properly set up?"
+            )
+            # Execute verification steps using tools
+            flutter_version = await self.flutter_cli.execute("--version")
+            doctor_status = await self.flutter_cli.execute("doctor")
+            # Analyze results (LLM-driven)
+            analysis = await self.llm_provider.generate_response(
+                f"Analyze Flutter version: {flutter_version.get('output')} and doctor: {doctor_status.get('output')}. "
+                "What issues exist and what should be fixed?"
+            )
+            return ExecutionResult(success=True, result={
+                "flutter_version": flutter_version.get('output'),
+                "doctor_status": doctor_status.get('output'),
+                "analysis": analysis
+            })
+        except Exception as e:
+            self.logger.error(f"Flutter environment verification failed: {e}")
+            return ExecutionResult(success=False, error=str(e))
 
     # Helper methods
     def _extract_architecture_files_from_response(self, response: str) -> List[Dict[str, str]]:
