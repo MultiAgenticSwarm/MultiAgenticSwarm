@@ -22,10 +22,10 @@ except ImportError:
         def __init__(self, **kwargs):
             for key, value in kwargs.items():
                 setattr(self, key, value)
-        
+
         def model_dump(self):
             return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-    
+
     def Field(**kwargs):
         return kwargs.get('default', None)
 
@@ -52,11 +52,11 @@ class AgentConfig(BaseModel):
 class Agent:
     """
     A multi-agent system agent with pluggable LLM backend support.
-    
+
     Each agent can be configured with different LLM providers and has
     access to a hierarchical tool system (local, shared, global).
     """
-    
+
     def __init__(
         self,
         name: str,
@@ -71,7 +71,7 @@ class Agent:
     ):
         """
         Initialize an agent.
-        
+
         Args:
             name: Unique name for the agent
             description: Description of the agent's purpose
@@ -85,7 +85,7 @@ class Agent:
         """
         if not name or not name.strip():
             raise ValueError("Agent name cannot be empty")
-            
+
         self.id = agent_id or str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -95,19 +95,19 @@ class Agent:
         self.llm_config = llm_config or {}
         self.max_iterations = max_iterations
         self.memory_enabled = memory_enabled
-        
+
         # Tool access tracking
         self.local_tools: List[str] = []
         self.shared_tools: List[str] = []
         self.global_tools: List[str] = []
-        
+
         # Runtime state
         self.memory: List[Dict[str, Any]] = []
         self.execution_context: Dict[str, Any] = {}
         self._llm_provider: Optional[LLMProvider] = None
-        
+
         logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model}")
-    
+
     @property
     def llm_provider(self) -> LLMProvider:
         """Get the LLM provider instance."""
@@ -118,50 +118,50 @@ class Agent:
                 **self.llm_config
             )
         return self._llm_provider
-    
+
     def add_to_memory(self, role: str, content: str, metadata: Optional[Dict] = None) -> None:
         """Add a message to the agent's memory."""
         if not self.memory_enabled:
             return
-            
+
         self.memory.append({
             "role": role,
             "content": content,
             "metadata": metadata or {},
             "timestamp": datetime.now().isoformat()
         })
-    
+
     def clear_memory(self) -> None:
         """Clear the agent's memory."""
         self.memory.clear()
         logger.debug(f"Cleared memory for agent '{self.name}'")
-    
+
     def get_available_tools(self, tool_registry: Dict[str, Any]) -> List[str]:
         """Get all tools available to this agent."""
         available = []
-        
+
         # Add local tools
         available.extend(self.local_tools)
-        
+
         # Add shared tools where this agent has access
         for tool_name in self.shared_tools:
             if tool_name in tool_registry:
                 tool = tool_registry[tool_name]
                 if hasattr(tool, 'shared_agents') and self.name in tool.shared_agents:
                     available.append(tool_name)
-        
+
         # Add global tools
         available.extend(self.global_tools)
-        
+
         return list(set(available))  # Remove duplicates
-    
+
     """
     Fixed Agent execution method that handles tool calls
     """
 
     async def execute(
-        self, 
-        input_text: str, 
+        self,
+        input_text: str,
         context: Optional[Dict[str, Any]] = None,
         tool_executor: Optional["ToolExecutor"] = None,
         available_tools: Optional[List[str]] = None,
@@ -169,7 +169,7 @@ class Agent:
     ) -> Dict[str, Any]:
         """Execute a task with standardized tool support."""
         start_time = time.time()
-        
+
         # Log the agent action start
         logger.log_agent_action(
             agent_name=self.name,
@@ -177,14 +177,14 @@ class Agent:
             input_data=input_text,
             context=context
         )
-        
+
         try:
             # Add input to memory
             self.add_to_memory("user", input_text)
-            
+
             # Prepare context
             execution_context = context or {}
-            
+
             # Handle tool access - support both new tool_executor and legacy available_tools
             if tool_executor:
                 tools_schema = tool_executor.get_tools_schema_for_agent(self.name)
@@ -203,9 +203,23 @@ class Agent:
                     if tool_name in tool_registry:
                         tool = tool_registry[tool_name]
                         if tool.can_be_used_by(self):
-                            schema = tool.get_schema()
+                            # Try different schema methods based on tool type
+                            if hasattr(tool, 'get_schema'):
+                                schema = tool.get_schema()
+                            elif hasattr(tool, 'get_openapi_schema'):
+                                schema = tool.get_openapi_schema()
+                            else:
+                                # Fallback schema
+                                schema = {
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool.name,
+                                        "description": tool.description,
+                                        "parameters": getattr(tool, 'parameters', {})
+                                    }
+                                }
                             tools_schemas.append(schema)
-                
+
                 if tools_schemas:
                     execution_context["tools"] = tools_schemas
                     if self.llm_provider_name == "anthropic":
@@ -213,58 +227,58 @@ class Agent:
                     else:
                         execution_context["tool_choice"] = "auto"
                     logger.debug(f"Agent {self.name}: Providing {len(tools_schemas)} legacy tools to LLM")
-            
+
             # Prepare messages for LLM
             messages = []
-            
+
             # Add system prompt
             if self.system_prompt:
                 messages.append({"role": "system", "content": self.system_prompt})
-            
+
             # Add conversation history
             for msg in self.memory[-10:]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
-            
+
             # Add tool parser
             parser = ToolCallParser()
-            
+
             # Start tool calling loop
             max_iterations = self.max_iterations
             iteration = 0
             final_response = ""
-            
+
             while iteration < max_iterations:
                 iteration += 1
                 logger.debug(f"Agent {self.name}: Tool calling iteration {iteration}")
-                
+
                 # Execute with LLM provider
                 response = await self.llm_provider.execute(
                     messages=messages,
                     context=execution_context
                 )
-                
+
                 # First check if LLM has native tool calling
                 tool_calls = []
                 if hasattr(self.llm_provider, 'extract_tool_calls'):
                     tool_calls = self.llm_provider.extract_tool_calls(response)
-                
+
                 # If no native tool calls, parse from response content
                 if not tool_calls and response.content:
                     tool_calls = parser.extract_tool_calls(response.content)
                     logger.debug(f"Parsed {len(tool_calls)} tool calls from response content")
-            
+
                 if not tool_calls:
                     # No tool calls, we're done
                     final_response = response.content
                     break
-                
+
                 # Execute tool calls using standardized executor or legacy tools
                 if tool_executor:
                     logger.debug(f"Agent {self.name}: Executing {len(tool_calls)} tool calls")
-                    
+
                     # Execute all tool calls
                     tool_responses = await tool_executor.execute_tool_calls(tool_calls, self.name)
-                    
+
                     # Add assistant message with tool calls to conversation
                     messages.append({
                         "role": "assistant",
@@ -280,7 +294,7 @@ class Agent:
                             } for tc in tool_calls
                         ]
                     })
-                    
+
                     # Add tool responses to conversation
                     if hasattr(self.llm_provider, 'create_tool_response_for_llm'):
                         tool_messages = self.llm_provider.create_tool_response_for_llm(tool_responses)
@@ -288,11 +302,11 @@ class Agent:
                             messages.extend(tool_messages)
                         else:
                             messages.append(tool_messages)
-                    
+
                 elif tool_registry and available_tools:
                     # Legacy tool execution support
                     logger.debug(f"Agent {self.name}: Executing {len(tool_calls)} tool calls (legacy mode)")
-                    
+
                     # Execute tool calls using legacy tools
                     tool_results = []
                     for tool_call in tool_calls:
@@ -307,7 +321,7 @@ class Agent:
                                     })
                                 else:
                                     tool_results.append({
-                                        "tool_call_id": tool_call.id, 
+                                        "tool_call_id": tool_call.id,
                                         "output": f"Permission denied for tool {tool_call.name}"
                                     })
                             except Exception as e:
@@ -315,15 +329,15 @@ class Agent:
                                     "tool_call_id": tool_call.id,
                                     "output": f"Tool execution error: {str(e)}"
                                 })
-                    
+
                     # Add assistant message with tool calls to conversation
                     messages.append({
-                        "role": "assistant", 
+                        "role": "assistant",
                         "content": response.content,
                         "tool_calls": [
                             {
                                 "id": tc.id,
-                                "type": "function", 
+                                "type": "function",
                                 "function": {
                                     "name": tc.name,
                                     "arguments": json.dumps(tc.arguments)
@@ -331,8 +345,8 @@ class Agent:
                             } for tc in tool_calls
                         ]
                     })
-                    
-                    # Add tool results to conversation  
+
+                    # Add tool results to conversation
                     for result in tool_results:
                         # Check if provider is Anthropic and format accordingly
                         if self.llm_provider_name == "anthropic":
@@ -352,23 +366,23 @@ class Agent:
                                 "tool_call_id": result["tool_call_id"],
                                 "content": json.dumps(result["output"])
                             })
-                
+
                 else:
                     # No tool execution available
                     logger.warning(f"Agent {self.name}: Tool calls requested but no tool executor or registry available")
                     final_response = response.content
                     break
-            
+
             # If we ran out of iterations, use the last response
             if iteration >= max_iterations and not final_response:
                 final_response = "Maximum tool calling iterations reached."
                 logger.warning(f"Agent {self.name}: Reached maximum tool calling iterations")
-            
+
             # Add final response to memory
             self.add_to_memory("assistant", final_response)
-            
+
             execution_time = time.time() - start_time
-            
+
             # Create result
             result = {
                 "agent_id": self.id,
@@ -379,7 +393,7 @@ class Agent:
                 "execution_time": execution_time,
                 "success": True
             }
-            
+
             logger.log_agent_action(
                 agent_name=self.name,
                 action="execute_complete",
@@ -390,12 +404,12 @@ class Agent:
                     "tool_iterations": iteration - 1
                 }
             )
-            
+
             return result
-            
+
         except Exception as e:
             execution_time = time.time() - start_time
-            
+
             logger.log_agent_action(
                 agent_name=self.name,
                 action="execute_error",
@@ -405,7 +419,7 @@ class Agent:
                     "execution_time": execution_time
                 }
             )
-            
+
             return {
                 "agent_id": self.id,
                 "agent_name": self.name,
@@ -415,7 +429,7 @@ class Agent:
                 "execution_time": execution_time,
                 "success": False
             }
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert agent to dictionary representation."""
         return {
@@ -432,7 +446,7 @@ class Agent:
             "shared_tools": self.shared_tools,
             "global_tools": self.global_tools
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Agent":
         """Create agent from dictionary representation."""
@@ -447,18 +461,18 @@ class Agent:
             memory_enabled=data.get("memory_enabled", True),
             agent_id=data.get("id")
         )
-        
+
         # Restore tool assignments
         agent.local_tools = data.get("local_tools", [])
         agent.shared_tools = data.get("shared_tools", [])
         agent.global_tools = data.get("global_tools", [])
-        
+
         return agent
-    
+
     @classmethod
     def from_config(cls, config: AgentConfig) -> "Agent":
         """Create agent from configuration object."""
         return cls.from_dict(config.model_dump())
-    
+
     def __repr__(self) -> str:
         return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}')"

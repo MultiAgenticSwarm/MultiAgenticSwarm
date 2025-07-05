@@ -58,44 +58,79 @@ pip install dist/multiagenticswarm-0.1.0-py3-none-any.whl
 import multiagenticswarm as mas
 # Or: from multiagenticswarm import Agent, Tool, Task, System
 
-# Create agents with different LLMs
-agent1 = Agent("DataAnalyst", 
-               system_prompt="You are a data analyst",
-               llm_provider="openai",
-               llm_model="gpt-4")
+# Set up comprehensive logging
+mas.setup_logging(verbose=True)
 
-agent2 = Agent("ActionExecutor",
-               system_prompt="You execute actions",
-               llm_provider="anthropic", 
-               llm_model="claude-3.5-sonnet")
+# Create agents with different LLMs
+agent1 = mas.Agent("DataAnalyst", 
+                   system_prompt="You are a data analyst specialized in extracting insights from data",
+                   llm_provider="openai",
+                   llm_model="gpt-4")
+
+agent2 = mas.Agent("ActionExecutor",
+                   system_prompt="You execute actions based on data analysis",
+                   llm_provider="anthropic", 
+                   llm_model="claude-3.5-sonnet")
+
+# Define actual functions for tools
+def fetch_data(query):
+    """Fetch data from various sources"""
+    return f"Data for query: {query}"
+
+def process_data(data):
+    """Process and analyze data"""
+    return f"Processed: {data}"
+
+def log_message(msg):
+    """Log important messages"""
+    print(f"LOG: {msg}")
+    return f"Logged: {msg}"
 
 # Create tools with different sharing levels
-local_tool = Tool("DataFetcher", 
-                  func=lambda query: fetch_data(query))
+local_tool = mas.Tool("DataFetcher", 
+                      func=fetch_data,
+                      description="Fetches data from external sources")
 local_tool.set_local(agent1)
 
-shared_tool = Tool("DataProcessor",
-                   func=lambda data: process(data))
+shared_tool = mas.Tool("DataProcessor",
+                       func=process_data,
+                       description="Processes and analyzes data")
 shared_tool.set_shared(agent1, agent2)
 
-global_tool = Tool("Logger", 
-                   func=lambda msg: print(f"LOG: {msg}"))
+global_tool = mas.Tool("Logger", 
+                       func=log_message,
+                       description="Logs messages to console")
 global_tool.set_global()
 
 # Create collaborative tasks
-task = Task("AnalyzeAndAct", steps=[
-    {"agent": agent1, "tool": "DataFetcher", "input": "get latest data"},
-    {"agent": agent2, "tool": "DataProcessor", "input": "process data"},
-    {"agent": agent2, "tool": "Logger", "input": "task completed"}
-])
+task = mas.Task("AnalyzeAndAct", 
+                description="Analyze data and execute actions",
+                steps=[
+                    {"agent": "DataAnalyst", "tool": "DataFetcher", "input": "get latest market data"},
+                    {"agent": "DataAnalyst", "tool": "DataProcessor", "input": "analyze trends"},
+                    {"agent": "ActionExecutor", "tool": "DataProcessor", "input": "validate results"},
+                    {"agent": "ActionExecutor", "tool": "Logger", "input": "task completed successfully"}
+                ])
+
+# Create event-driven automation
+trigger = mas.Trigger("DataAvailable", 
+                      condition=lambda event: event.get("type") == "data_ready")
+automation = mas.Automation("AutoAnalyze", trigger=trigger, task=task)
 
 # Build and run system
-system = System()
+system = mas.System(enable_logging=True, verbose=True)
 system.register_agents(agent1, agent2)
 system.register_tools(local_tool, shared_tool, global_tool)
 system.register_tasks(task)
+system.register_automations(automation)
 
+# Execute the system
 if __name__ == "__main__":
+    # Run a single task
+    result = system.execute_task("AnalyzeAndAct")
+    print(f"Task result: {result}")
+    
+    # Or run the full system with automations
     system.run()
 ```
 
@@ -166,6 +201,35 @@ system = System.from_config("config.yaml")
 system.run()
 ```
 
+## 📚 Examples
+
+We provide several comprehensive examples to get you started:
+
+### 🔰 Simple Example
+```bash
+python simple_example.py
+```
+A basic demonstration showing agent collaboration and tool sharing.
+
+### 🚀 Complete Example  
+```bash
+python complete_example.py
+```
+Full-featured demonstration showcasing all MultiAgenticSwarm capabilities.
+
+### 🏢 Real-World Example
+```bash
+python real_world_example.py
+```
+Production-ready content creation pipeline with multiple agents and automation.
+
+### 📱 Flutter Development Example
+```bash
+cd examples/flutter/
+python create_app_with_llm.py
+```
+Demonstrates using MultiAgenticSwarm for Flutter app development.
+
 ## 🔧 Advanced Features
 
 ### Event-Driven Automations
@@ -207,6 +271,43 @@ agents = [
     Agent("Fast", llm_provider="together", llm_model="llama-3.1-8b"),     # Speed
     Agent("Enterprise", llm_provider="azure", llm_model="gpt-4"),         # Compliance
 ]
+```
+
+## 🎯 Best Practices
+
+### Agent Design
+- **Specialized Roles**: Create agents with specific, well-defined responsibilities
+- **Clear Prompts**: Write detailed system prompts that define the agent's expertise
+- **Appropriate Models**: Match LLM models to task complexity (GPT-4 for complex reasoning, GPT-3.5 for simple tasks)
+
+### Tool Hierarchy
+- **Local Tools**: Use for agent-specific functionality (e.g., specialized APIs)
+- **Shared Tools**: Use for collaborative functionality (e.g., data processing)
+- **Global Tools**: Use for common utilities (e.g., logging, notifications)
+
+### Task Design
+- **Atomic Steps**: Break complex workflows into clear, manageable steps
+- **Sequential Flow**: Design logical progression from one agent to another
+- **Error Handling**: Include validation and retry mechanisms
+
+### System Architecture
+```python
+# Recommended pattern for production systems
+system = mas.System(enable_logging=True, verbose=True)
+
+# Register components in order
+system.register_agents(*agents)      # Agents first
+system.register_tools(*tools)        # Then tools  
+system.register_tasks(*tasks)        # Then tasks
+system.register_automations(*autos)  # Finally automations
+
+# Execute with proper error handling
+try:
+    result = system.execute_task("TaskName")
+    logger.info(f"Task completed: {result}")
+except Exception as e:
+    logger.error(f"Task failed: {e}")
+    # Implement retry or fallback logic
 ```
 
 ## 🛠️ Development

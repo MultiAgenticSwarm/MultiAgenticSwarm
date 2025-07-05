@@ -1,0 +1,340 @@
+"""
+Base classes for all AgentSwarm implementations.
+Uses MultiAgenticSwarm as the foundational SDK.
+"""
+
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional, Union
+import logging
+import asyncio
+import time
+
+# Import MultiAgenticSwarm as the core SDK
+try:
+    import multiagenticswarm as mas
+    MAS_AVAILABLE = True
+except ImportError:
+    MAS_AVAILABLE = False
+    mas = None
+
+from .types import AgentRole, TaskContext, ExecutionResult, CollaborationPattern, WorkflowPattern
+
+class BaseAgent(mas.Agent if MAS_AVAILABLE else ABC):
+    """
+    Base class for all specialized agents.
+    Inherits directly from MultiAgenticSwarm Agent for full SDK integration.
+
+    All domain-specific agents inherit from this class and implement
+    the abstract methods to provide specialized functionality.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        role: Union[AgentRole, str],
+        system: Optional[Any] = None,
+        llm_provider: str = "openai",
+        llm_model: str = "gpt-4",
+        temperature: float = 0.7,
+        **kwargs
+    ):
+        if not MAS_AVAILABLE:
+            raise ImportError("MultiAgenticSwarm is required but not available")
+
+        self.role = role if isinstance(role, AgentRole) else AgentRole(role)
+        self.mas_system = system or mas.System()
+        self.logger = mas.get_logger(f"agentswarm.{name}")
+
+        # Build specialized system prompt
+        system_prompt = self._build_instructions()
+
+        # Initialize MAS Agent with proper configuration
+        super().__init__(
+            name=name,
+            description=f"A {self.role.value} agent",
+            system_prompt=system_prompt,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            llm_config={"temperature": temperature, **kwargs}
+        )
+
+        # Register tools with MAS system
+        self._register_tools_with_mas()
+
+        # Register with MAS system
+        self.mas_system.register_agent(self)
+
+        # Initialize agent-specific state
+        self.context = TaskContext(project_path=".")
+        self.execution_history = []
+
+    def _build_instructions(self) -> str:
+        """Build instructions combining base role and specialization"""
+        base_instructions = f"""You are a {self.role.value} agent in a multi-agent system.
+
+Your core responsibilities:
+- Follow software engineering best practices
+- Communicate clearly with other agents
+- Provide detailed explanations for your decisions
+- Handle errors gracefully and report issues
+- Maintain consistency across the project
+
+"""
+
+        specialized = self._get_specialized_instructions()
+        tools_info = self._get_tools_information()
+
+        return base_instructions + specialized + tools_info
+
+    @abstractmethod
+    def _get_specialized_instructions(self) -> str:
+        """Get domain-specific instructions for the agent"""
+        pass
+
+    @abstractmethod
+    def _get_tools(self) -> List[Any]:
+        """Get tools this agent needs from MAS"""
+        pass
+
+    def get_available_tools(self, system_tools):
+        """Get available tools for this agent from system tools"""
+        return [tool for tool in system_tools.values()
+                if hasattr(tool, 'is_available_to') and
+                tool.is_available_to(self.name)]
+
+    def _get_tools_information(self) -> str:
+        """Get information about available tools"""
+        tools = self._get_tools()
+        if not tools:
+            return "\nNo specialized tools available."
+
+        tools_info = "\n\nAvailable tools:\n"
+        for tool in tools:
+            if isinstance(tool, dict):
+                # Handle dictionary format
+                name = tool.get("name", "Unknown")
+                description = tool.get("description", "No description")
+                tools_info += f"- {name}: {description}\n"
+            else:
+                # Handle object format
+                tools_info += f"- {tool.name}: {tool.description}\n"
+
+        return tools_info
+
+    def _register_tools_with_mas(self) -> None:
+        """Register tools with MAS system using proper tool sharing"""
+        tools = self._get_tools()
+        for tool_def in tools:
+            # Tools are now defined as dictionaries with metadata
+            # The actual tool instances are provided by the system
+            if isinstance(tool_def, dict):
+                # For dictionary format, we just note the tool requirements
+                # The actual tool registration happens in the system
+                pass
+            else:
+                # Handle legacy format - create MAS Tool from definition
+                mas_tool = mas.Tool(
+                    name=tool_def.get("name"),
+                    func=tool_def.get("func"),
+                    description=tool_def.get("description", ""),
+                    parameters=tool_def.get("parameters", {})
+                )
+
+                # Set tool sharing level
+                scope = tool_def.get("scope", "local")
+                if scope == "local":
+                    mas_tool.set_local(self)
+                elif scope == "shared":
+                    # For shared tools, we need to specify which agents can use them
+                    # This will be handled by the swarm orchestrator
+                    pass
+                elif scope == "global":
+                    mas_tool.set_global()
+
+                # Register with MAS system
+                self.mas_system.register_tool(mas_tool)
+
+    async def execute(
+        self,
+        task: Union[str, Dict[str, Any]],
+        context: Optional[TaskContext] = None
+    ) -> ExecutionResult:
+        """Execute task using MAS infrastructure"""
+
+        if context:
+            self.context = context
+
+        # Convert task to proper format
+        if isinstance(task, str):
+            task_input = task
+        else:
+            task_input = task.get("description", str(task))
+
+        start_time = time.time()
+
+        try:
+            # Use MAS agent execution directly (we inherit from mas.Agent)
+            result = await super().execute(
+                input_text=task_input,
+                context=context.__dict__ if context else None
+            )
+
+            execution_time = time.time() - start_time
+
+            # Create execution result
+            execution_result = ExecutionResult(
+                success=True,
+                agent_name=self.name,
+                task_id=f"{self.name}_task_{len(self.execution_history)}",
+                output=result,
+                execution_time=execution_time,
+                metadata={"task": task}
+            )
+
+            # Store in history
+            self.execution_history.append(execution_result)
+
+            return execution_result
+
+        except Exception as e:
+            execution_time = time.time() - start_time
+            self.logger.error(f"Task execution failed: {str(e)}")
+
+            execution_result = ExecutionResult(
+                success=False,
+                agent_name=self.name,
+                task_id=f"{self.name}_task_{len(self.execution_history)}",
+                error_message=str(e),
+                execution_time=execution_time,
+                metadata={"task": task}
+            )
+
+            self.execution_history.append(execution_result)
+
+            return execution_result
+
+    async def collaborate(
+        self,
+        other_agents: List['BaseAgent'],
+        task: Dict[str, Any],
+        pattern: Optional[CollaborationPattern] = None
+    ) -> List[ExecutionResult]:
+        """Collaborate with other agents using MAS Task and Collaboration system"""
+
+        if pattern:
+            return await pattern.execute([self] + other_agents, task)
+
+        # Use MAS Collaboration system
+        collaboration = mas.Collaboration(
+            name=f"collaboration_{len(self.execution_history)}",
+            description=task.get("description", "Multi-agent collaboration"),
+            agents=[self] + other_agents
+        )
+
+        # Execute collaboration using MAS system
+        result = await self.mas_system.execute_collaboration(
+            collaboration=collaboration,
+            task=task
+        )
+
+        return [result]  # MAS returns a single result that we wrap in a list
+
+    @abstractmethod
+    def _get_specialized_instructions(self) -> str:
+        """Get domain-specific instructions for the agent"""
+        pass
+
+    @abstractmethod
+    def _get_tools(self) -> List[Dict[str, Any]]:
+        """Get tools this agent needs. Return list of tool definitions:
+        [
+            {
+                "name": "tool_name",
+                "func": callable,
+                "description": "Tool description",
+                "scope": "local|shared|global"
+            }
+        ]
+        """
+        pass
+
+class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
+    """
+    Base class for all swarm implementations.
+    Inherits directly from MultiAgenticSwarm System for full SDK integration.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        project_path: str = ".",
+        system: Optional[Any] = None,
+        llm_provider: str = "openai",
+        llm_model: str = "gpt-4",
+        **kwargs
+    ):
+        if not MAS_AVAILABLE:
+            raise ImportError("MultiAgenticSwarm is required but not available")
+
+        self.name = name
+        self.project_path = project_path
+        self.llm_provider = llm_provider
+        self.llm_model = llm_model
+        self.logger = mas.get_logger(f"agentswarm.{name}")
+
+        # Initialize MAS System
+        super().__init__(
+            config_path=None,
+            enable_logging=True,
+            verbose=True
+        )
+
+        # Setup domain-specific components
+        self._setup_tools()
+        self._setup_agents()
+        self._setup_workflows()
+
+    @abstractmethod
+    def _setup_tools(self) -> None:
+        """Setup domain-specific tools"""
+        pass
+
+    @abstractmethod
+    def _setup_agents(self) -> None:
+        """Setup domain-specific agents"""
+        pass
+
+    def _setup_workflows(self) -> None:
+        """Setup default workflows using MAS Task system"""
+        # Default implementation - can be overridden by subclasses
+        pass
+
+    def add_agent(self, agent: BaseAgent) -> None:
+        """Add an agent to the swarm"""
+        self.register_agent(agent)
+
+    async def execute_workflow(
+        self,
+        workflow_name: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> ExecutionResult:
+        """Execute a workflow using MAS Task system"""
+        return await self.execute_task(workflow_name, context)
+
+        if context:
+            self.context = context
+
+        results = await workflow.run(self.context)
+        self.execution_history.extend(results)
+
+        return results
+
+    def get_execution_history(self) -> List[ExecutionResult]:
+        """Get the execution history for the entire swarm"""
+        return self.execution_history.copy()
+
+    def clear_history(self):
+        """Clear the execution history"""
+        self.execution_history.clear()
+        for agent in self.agents.values():
+            agent.clear_history()
