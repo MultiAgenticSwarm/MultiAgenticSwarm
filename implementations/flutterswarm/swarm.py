@@ -8,6 +8,7 @@ import logging
 
 # Import MultiAgenticSwarm as the core SDK
 import multiagenticswarm as mas
+from multiagenticswarm.core.task import TaskStep
 
 # Import AgentSwarm base classes
 from implementations.agentswarm.core import BaseSwarm, TaskContext, ExecutionResult
@@ -70,11 +71,16 @@ class FlutterSwarm(BaseSwarm):
         """Setup CLI wrapper tools - just interfaces, no Flutter logic"""
 
         # Import the tool factory functions
-        from .tools.flutter_cli import create_flutter_cli_tool
-        from .tools.dart_cli import create_dart_cli_tool
-        from .tools.file_system import create_file_system_tool
+        from .tools.flutter_cli import create_flutter_cli_tool, FlutterCLITool
+        from .tools.dart_cli import create_dart_cli_tool, DartCLITool
+        from .tools.file_system import create_file_system_tool, FileSystemTool
 
-        # Create MAS Tools using the factory functions
+        # Create actual tool instances for agent use
+        self.flutter_cli_instance = FlutterCLITool(self.project_path)
+        self.dart_cli_instance = DartCLITool(self.project_path)
+        self.file_system_instance = FileSystemTool(self.project_path)
+
+        # Create MAS Tools using the factory functions for system registration
         self.flutter_cli = create_flutter_cli_tool(self.project_path)
         self.dart_cli = create_dart_cli_tool(self.project_path)
         self.file_system = create_file_system_tool(self.project_path)
@@ -100,9 +106,9 @@ class FlutterSwarm(BaseSwarm):
             working_directory=self.project_path,
             llm_provider=self.llm_provider,
             llm_model=self.llm_model,
-            flutter_cli=self.flutter_cli,
-            dart_cli=self.dart_cli,
-            file_system=self.file_system
+            flutter_cli=self.flutter_cli_instance,
+            dart_cli=self.dart_cli_instance,
+            file_system=self.file_system_instance
         )
 
         self.developer = FlutterDeveloperAgent(
@@ -110,9 +116,9 @@ class FlutterSwarm(BaseSwarm):
             working_directory=self.project_path,
             llm_provider=self.llm_provider,
             llm_model=self.llm_model,
-            flutter_cli=self.flutter_cli,
-            dart_cli=self.dart_cli,
-            file_system=self.file_system
+            flutter_cli=self.flutter_cli_instance,
+            dart_cli=self.dart_cli_instance,
+            file_system=self.file_system_instance
         )
 
         self.ui_designer = FlutterUIDesignerAgent(
@@ -120,9 +126,9 @@ class FlutterSwarm(BaseSwarm):
             working_directory=self.project_path,
             llm_provider=self.llm_provider,
             llm_model=self.llm_model,
-            flutter_cli=self.flutter_cli,
-            dart_cli=self.dart_cli,
-            file_system=self.file_system
+            flutter_cli=self.flutter_cli_instance,
+            dart_cli=self.dart_cli_instance,
+            file_system=self.file_system_instance
         )
 
         self.tester = FlutterTesterAgent(
@@ -130,9 +136,9 @@ class FlutterSwarm(BaseSwarm):
             working_directory=self.project_path,
             llm_provider=self.llm_provider,
             llm_model=self.llm_model,
-            flutter_cli=self.flutter_cli,
-            dart_cli=self.dart_cli,
-            file_system=self.file_system
+            flutter_cli=self.flutter_cli_instance,
+            dart_cli=self.dart_cli_instance,
+            file_system=self.file_system_instance
         )
 
         # Add all agents to the swarm (using BaseSwarm.add_agent)
@@ -151,12 +157,12 @@ class FlutterSwarm(BaseSwarm):
             name="create_flutter_app",
             description="Complete Flutter app creation workflow",
             steps=[
-                {"agent": "architect", "action": "design_architecture", "input": "app_requirements"},
-                {"agent": "developer", "action": "setup_project_structure", "input": "architecture_design"},
-                {"agent": "ui_designer", "action": "design_ui", "input": "project_structure"},
-                {"agent": "developer", "action": "implement_feature", "input": "ui_design"},
-                {"agent": "tester", "action": "write_tests", "input": "implemented_features"},
-                {"agent": "developer", "action": "implement_feature", "input": "test_suite"}
+                TaskStep(agent="architect", tool="design_architecture", input_data="app_requirements"),
+                TaskStep(agent="developer", tool="setup_project_structure", input_data="architecture_design"),
+                TaskStep(agent="ui_designer", tool="design_ui", input_data="project_structure"),
+                TaskStep(agent="developer", tool="implement_feature", input_data="ui_design"),
+                TaskStep(agent="tester", tool="write_tests", input_data="implemented_features"),
+                TaskStep(agent="developer", tool="implement_feature", input_data="test_suite")
             ]
         )
 
@@ -165,10 +171,10 @@ class FlutterSwarm(BaseSwarm):
             name="implement_flutter_feature",
             description="Implement a new Flutter feature",
             steps=[
-                {"agent": "architect", "action": "analyze_requirements", "input": "feature_description"},
-                {"agent": "ui_designer", "action": "design_ui", "input": "feature_analysis"},
-                {"agent": "developer", "action": "implement_feature", "input": "feature_ui_design"},
-                {"agent": "tester", "action": "write_tests", "input": "feature_implementation"}
+                TaskStep(agent="architect", tool="analyze_requirements", input_data="feature_description"),
+                TaskStep(agent="ui_designer", tool="design_ui", input_data="feature_analysis"),
+                TaskStep(agent="developer", tool="implement_feature", input_data="feature_ui_design"),
+                TaskStep(agent="tester", tool="write_tests", input_data="feature_implementation")
             ]
         )
 
@@ -679,16 +685,32 @@ class FlutterSwarm(BaseSwarm):
             # Convert context to TaskContext if needed
             if isinstance(context, dict):
                 from implementations.agentswarm.core.types import TaskContext
+                # Extract supported TaskContext fields
+                supported_fields = {
+                    'project_structure', 'requirements', 'constraints',
+                    'target_platforms', 'existing_files', 'dependencies'
+                }
+
+                task_context_kwargs = {}
+                metadata = {}
+
+                for key, value in context.items():
+                    if key in supported_fields:
+                        task_context_kwargs[key] = value
+                    elif key != 'project_path':  # Already handled as positional arg
+                        metadata[key] = value
+
                 task_context = TaskContext(
                     project_path=self.project_path,
-                    **context
+                    metadata=metadata,
+                    **task_context_kwargs
                 )
             else:
                 task_context = context
 
-            return await method(input_data, task_context)
+            return await method(task_context)
         else:
-            return method(input_data, context)
+            return method(context)
 
     async def execute_workflow(self, workflow_name: str, context: Dict[str, Any]):
         """Execute a workflow by mapping steps to agent methods."""
@@ -700,11 +722,23 @@ class FlutterSwarm(BaseSwarm):
 
         result = None
         for step in workflow.steps:
-            agent_name = step["agent"]
-            action = step["action"]
-            input_key = step["input"]
-            input_data = context.get(input_key)
+            # Handle both TaskStep objects and dictionary steps
+            if hasattr(step, 'agent'):
+                # TaskStep object
+                agent_name = step.agent
+                action = step.tool or "execute"  # Default action if no tool specified
+                input_data = step.input_data or context
+            else:
+                # Dictionary step (legacy)
+                agent_name = step["agent"]
+                action = step["action"]
+                input_key = step["input"]
+                input_data = context.get(input_key)
+
             result = await self._dispatch_action(agent_name, action, input_data, context)
-            # Optionally update context with result for next step
-            context[action] = result
+            # Update context with result for next step
+            if hasattr(step, 'agent'):
+                context[f"{step.agent}_result"] = result
+            else:
+                context[action] = result
         return result

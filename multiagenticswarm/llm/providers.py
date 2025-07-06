@@ -39,10 +39,10 @@ async def retry_with_exponential_backoff(
     """Retry function with exponential backoff."""
     if retry_config is None:
         retry_config = RetryConfig()
-    
+
     if retryable_exceptions is None:
         retryable_exceptions = (Exception,)
-    
+
     for attempt in range(retry_config.max_retries + 1):
         try:
             return await func()
@@ -50,7 +50,7 @@ async def retry_with_exponential_backoff(
             if attempt == retry_config.max_retries:
                 logger.error(f"Max retries ({retry_config.max_retries}) exceeded: {e}")
                 raise
-            
+
             delay = min(
                 retry_config.base_delay * (retry_config.exponential_base ** attempt),
                 retry_config.max_delay
@@ -72,7 +72,7 @@ class LLMProviderType(str, Enum):
 
 class LLMResponse:
     """Response from an LLM provider."""
-    
+
     def __init__(
         self,
         content: str,
@@ -86,18 +86,18 @@ class LLMResponse:
         self.usage = usage or {}
         self.finish_reason = finish_reason
         self.tool_calls = tool_calls or []
-        
+
     def __str__(self) -> str:
         return self.content
-        
+
     def __repr__(self) -> str:
         return f"LLMResponse(content='{self.content[:50]}...', usage={self.usage})"
-    
+
     @property
     def total_tokens(self) -> int:
         """Get total tokens used."""
         return self.usage.get("total_tokens", 0)
-    
+
     @property
     def has_tool_calls(self) -> bool:
         """Check if response contains tool calls."""
@@ -106,7 +106,7 @@ class LLMResponse:
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
-    
+
     def __init__(
         self,
         model: str,
@@ -118,11 +118,11 @@ class LLMProvider(ABC):
         self.api_key = api_key
         self.config = kwargs
         self.retry_config = retry_config or RetryConfig()
-        
+
         # Validate configuration on initialization
         if not self.validate_config():
             raise ValueError(f"Invalid configuration for {self.__class__.__name__}")
-    
+
     @abstractmethod
     async def execute(
         self,
@@ -132,12 +132,12 @@ class LLMProvider(ABC):
     ) -> LLMResponse:
         """Execute a completion with the LLM provider."""
         pass
-    
+
     @abstractmethod
     def validate_config(self) -> bool:
         """Validate the provider configuration."""
         pass
-    
+
     async def execute_with_retry(
         self,
         messages: List[Dict[str, str]],
@@ -147,17 +147,17 @@ class LLMProvider(ABC):
         """Execute with automatic retry logic."""
         async def _execute():
             return await self.execute(messages, context, **kwargs)
-        
+
         return await retry_with_exponential_backoff(
             _execute,
             self.retry_config,
             retryable_exceptions=(ConnectionError, TimeoutError, RuntimeError)
         )
-    
+
     def get_supported_parameters(self) -> List[str]:
         """Get list of supported parameters for this provider."""
         return ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"]
-    
+
     def _sanitize_parameters(self, **kwargs) -> Dict[str, Any]:
         """Sanitize parameters to only include supported ones."""
         supported = self.get_supported_parameters()
@@ -166,25 +166,25 @@ class LLMProvider(ABC):
 
 class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
     """OpenAI LLM provider."""
-    
+
     def __init__(self, model: str = "gpt-3.5-turbo", **kwargs):
-        api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
+        api_key = kwargs.pop("api_key", None) or os.getenv("OPENAI_API_KEY")
         # Set attributes before calling super().__init__ for validation
         self.organization = kwargs.get("organization") or os.getenv("OPENAI_ORG_ID")
         self.base_url = kwargs.get("base_url")
         self.timeout = kwargs.get("timeout", 60)
         super().__init__(model, api_key, **kwargs)
-        
+
         if not self.api_key:
             raise ValueError("OpenAI API key not provided")
-    
+
     def get_supported_parameters(self) -> List[str]:
         """Get supported parameters for OpenAI."""
         return [
-            "temperature", "max_tokens", "top_p", "frequency_penalty", 
+            "temperature", "max_tokens", "top_p", "frequency_penalty",
             "presence_penalty", "stop", "logit_bias", "user", "seed"
         ]
-    
+
     async def execute(
         self,
         messages: List[Dict[str, str]],
@@ -193,7 +193,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
     ) -> LLMResponse:
         """Execute OpenAI completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="openai",
@@ -201,7 +201,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
             messages=messages,
             context=context
         )
-        
+
         try:
             # Import OpenAI client
             try:
@@ -209,7 +209,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 from openai import RateLimitError, APITimeoutError, APIConnectionError
             except ImportError:
                 raise ImportError("OpenAI package not installed. Run: pip install openai")
-            
+
             # Create OpenAI client
             client_kwargs = {
                 "api_key": self.api_key,
@@ -219,9 +219,9 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 client_kwargs["organization"] = self.organization
             if self.base_url:
                 client_kwargs["base_url"] = self.base_url
-                
+
             client = AsyncOpenAI(**client_kwargs)
-            
+
             # Sanitize and prepare parameters
             sanitized_params = self._sanitize_parameters(**kwargs)
             params = {
@@ -233,20 +233,20 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 "frequency_penalty": sanitized_params.get("frequency_penalty", self.config.get("frequency_penalty", 0.0)),
                 "presence_penalty": sanitized_params.get("presence_penalty", self.config.get("presence_penalty", 0.0)),
             }
-            
+
             # Add optional parameters if provided
             for param in ["stop", "logit_bias", "user", "seed"]:
                 value = sanitized_params.get(param, self.config.get(param))
                 if value is not None:
                     params[param] = value
-            
+
             # Add tools if provided - STANDARDIZED WAY
             if context and "tools" in context:
                 tools = self.prepare_tools_for_llm(context["tools"])
                 if tools:
                     params["tools"] = tools
                     params["tool_choice"] = context.get("tool_choice", "auto")
-            
+
             # Log the actual API parameters (without sensitive info)
             log_params = {k: v for k, v in params.items() if k != "api_key"}
             logger.log_system_event("llm_api_call", {
@@ -254,7 +254,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 "model": self.model,
                 "parameters": log_params
             })
-            
+
             # Make API call with specific error handling
             try:
                 response = await client.chat.completions.create(**params)
@@ -267,7 +267,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 raise
             except APITimeoutError as e:
                 logger.log_system_event("llm_timeout", {
-                    "provider": "openai", 
+                    "provider": "openai",
                     "model": self.model,
                     "error": str(e)
                 }, level="WARNING")
@@ -275,19 +275,19 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
             except APIConnectionError as e:
                 logger.log_system_event("llm_connection_error", {
                     "provider": "openai",
-                    "model": self.model, 
+                    "model": self.model,
                     "error": str(e)
                 }, level="WARNING")
                 raise ConnectionError(f"OpenAI connection failed: {e}")
-            
+
             # Extract content and tool calls - STANDARDIZED WAY
             content = response.choices[0].message.content or ""
             finish_reason = response.choices[0].finish_reason
             tool_calls_requests = self.extract_tool_calls(response)
-            
+
             # Convert to legacy format for compatibility
             tool_calls = [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in tool_calls_requests]
-            
+
             # Build metadata
             metadata = {
                 "provider": "openai",
@@ -296,14 +296,14 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 "system_fingerprint": getattr(response, "system_fingerprint", None),
                 "execution_time": time.time() - start_time
             }
-            
+
             # Extract usage information
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
@@ -312,7 +312,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 finish_reason=finish_reason,
                 tool_calls=tool_calls
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="openai",
@@ -321,9 +321,9 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except (ImportError, ValueError) as e:
             logger.log_system_event("llm_error", {
                 "provider": "openai",
@@ -334,22 +334,22 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
             raise e  # Re-raise configuration errors
         except Exception as e:
             logger.log_system_event("llm_error", {
-                "provider": "openai", 
+                "provider": "openai",
                 "model": self.model,
                 "error_type": type(e).__name__,
                 "error": str(e)
             }, level="ERROR")
             raise RuntimeError(f"OpenAI execution failed: {e}")
-    
+
     # Standardized tool calling methods
     def _convert_tools_to_provider_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert standardized tools to OpenAI format."""
         return tools  # OpenAI format is our standard format
-    
+
     def _extract_tool_calls_from_response(self, response: Any) -> List[ToolCallRequest]:
         """Extract tool calls from OpenAI response."""
         tool_calls = []
-        
+
         if hasattr(response, 'choices') and response.choices:
             choice = response.choices[0]
             if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
@@ -359,15 +359,15 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                     except (json.JSONDecodeError, TypeError):
                         arguments = {}
                         logger.warning(f"Failed to parse tool arguments: {tool_call.function.arguments}")
-                    
+
                     tool_calls.append(ToolCallRequest(
                         id=tool_call.id,
                         name=tool_call.function.name,
                         arguments=arguments
                     ))
-        
+
         return tool_calls
-    
+
     def _create_tool_response_message(self, tool_responses: List[ToolCallResponse]) -> List[Dict[str, Any]]:
         """Create OpenAI tool response messages."""
         messages = []
@@ -384,7 +384,7 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
                 })
             })
         return messages
-    
+
     def validate_config(self) -> bool:
         """Validate OpenAI configuration."""
         return bool(self.api_key and self.model)
@@ -392,21 +392,21 @@ class OpenAIProvider(LLMProvider, StandardizedToolCallingMixin):
 
 class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
     """Anthropic Claude LLM provider."""
-    
+
     def __init__(self, model: str = "claude-3-5-sonnet-20241022", **kwargs):
         api_key = kwargs.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
         super().__init__(model, api_key=api_key, **kwargs)
-        
+
         self.base_url = kwargs.get("base_url")
         self.timeout = kwargs.get("timeout", 60)
-        
+
         if not self.api_key:
             raise ValueError("Anthropic API key not provided")
-    
+
     def get_supported_parameters(self) -> List[str]:
         """Get supported parameters for Anthropic."""
         return ["temperature", "max_tokens", "top_p", "top_k", "stop_sequences"]
-    
+
     def _format_messages_for_anthropic(self, messages: list) -> tuple[str, list]:
         """Format messages for Anthropic API, converting tool messages and assistant tool_calls."""
         system_message = ""
@@ -451,7 +451,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                     "content": content
                 })
         return system_message, formatted_messages
-    
+
     async def execute(
         self,
         messages: list,
@@ -460,7 +460,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
     ) -> LLMResponse:
         """Execute Anthropic completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="anthropic",
@@ -475,7 +475,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 from anthropic import RateLimitError, APITimeoutError, APIConnectionError
             except ImportError:
                 raise ImportError("Anthropic package not installed. Run: pip install anthropic")
-            
+
             # Create Anthropic client
             client_kwargs = {
                 "api_key": self.api_key,
@@ -483,18 +483,18 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
             }
             if self.base_url:
                 client_kwargs["base_url"] = self.base_url
-                
+
             client = AsyncAnthropic(**client_kwargs)
-            
+
             # Format messages for Anthropic
             system_message, conversation_messages = self._format_messages_for_anthropic(messages)
-            
+
             # Ensure we have at least one user message and proper alternating pattern
             if not conversation_messages:
                 conversation_messages = [{"role": "user", "content": "Hello"}]
             elif conversation_messages[-1]["role"] != "user":
                 conversation_messages.append({"role": "user", "content": "Please respond."})
-            
+
             # Fix alternating pattern
             fixed_messages = []
             last_role = None
@@ -515,7 +515,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 else:
                     fixed_messages.append(msg)
                     last_role = msg["role"]
-            
+
             # Sanitize and prepare parameters
             sanitized_params = self._sanitize_parameters(**kwargs)
             params = {
@@ -525,17 +525,17 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 "temperature": sanitized_params.get("temperature", self.config.get("temperature", 0.7)),
                 "top_p": sanitized_params.get("top_p", self.config.get("top_p", 1.0)),
             }
-            
+
             # Add optional parameters
             for param in ["top_k", "stop_sequences"]:
                 value = sanitized_params.get(param, self.config.get(param))
                 if value is not None:
                     params[param] = value
-            
+
             # Add system message if present
             if system_message:
                 params["system"] = system_message
-            
+
             # Add tools if provided - STANDARDIZED WAY
             if context and "tools" in context:
                 tools = self.prepare_tools_for_llm(context["tools"])
@@ -549,7 +549,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                         params["tool_choice"] = {"type": "auto"}
                     else:
                         params["tool_choice"] = tool_choice
-            
+
             # Make API call with specific error handling
             try:
                 response = await client.messages.create(**params)
@@ -562,17 +562,17 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
             except APIConnectionError as e:
                 logger.warning(f"Anthropic connection error: {e}")
                 raise ConnectionError(f"Anthropic connection failed: {e}")
-            
+
             # Extract content and tool calls - STANDARDIZED WAY
             content = ""
             for block in response.content:
                 if block.type == "text":
                     content += block.text
-            
+
             tool_calls_requests = self.extract_tool_calls(response)
             # Convert to legacy format for compatibility
             tool_calls = [{"id": tc.id, "name": tc.name, "arguments": tc.arguments} for tc in tool_calls_requests]
-            
+
             # Build metadata
             metadata = {
                 "provider": "anthropic",
@@ -580,14 +580,14 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 "stop_reason": response.stop_reason,
                 "tool_calls": tool_calls  # CRITICAL FIX: Include tool calls in metadata
             }
-            
+
             # Extract usage information
             usage = {
                 "input_tokens": response.usage.input_tokens,
                 "output_tokens": response.usage.output_tokens,
                 "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
@@ -596,7 +596,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 finish_reason=response.stop_reason,
                 tool_calls=tool_calls
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="anthropic",
@@ -605,15 +605,15 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except (ImportError, ValueError) as e:
             raise e  # Re-raise configuration errors
         except Exception as e:
             logger.error(f"Anthropic execution failed: {e}")
             raise RuntimeError(f"Anthropic execution failed: {e}")
-    
+
     # Standardized tool calling methods
     def _convert_tools_to_provider_format(self, tools: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Convert standardized tools to Anthropic format."""
@@ -636,11 +636,11 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                     "input_schema": tool["parameters"]
                 })
         return anthropic_tools
-    
+
     def _extract_tool_calls_from_response(self, response: Any) -> List[ToolCallRequest]:
         """Extract tool calls from Anthropic response."""
         tool_calls = []
-        
+
         # First check if the response is an LLMResponse with tool_calls attribute
         if hasattr(response, 'tool_calls') and response.tool_calls:
             # Use the pre-extracted tool calls from LLMResponse
@@ -655,7 +655,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                     # Assume it's already a ToolCallRequest
                     tool_calls.append(tc_data)
             return tool_calls
-        
+
         # Fallback: check response.content blocks (original behavior)
         if hasattr(response, 'content'):
             for block in response.content:
@@ -665,9 +665,9 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                         name=block.name,
                         arguments=block.input if isinstance(block.input, dict) else {}
                     ))
-        
+
         return tool_calls
-    
+
     def _create_tool_response_message(self, tool_responses: List[ToolCallResponse]) -> List[Dict[str, Any]]:
         """Create Anthropic tool response messages."""
         messages = []
@@ -687,7 +687,7 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
                 ]
             })
         return messages
-    
+
     def validate_config(self) -> bool:
         """Validate Anthropic configuration."""
         return bool(self.api_key and self.model)
@@ -695,13 +695,13 @@ class AnthropicProvider(LLMProvider, StandardizedToolCallingMixin):
 
 class AWSBedrockProvider(LLMProvider):
     """AWS Bedrock LLM provider."""
-    
+
     def __init__(self, model: str = "anthropic.claude-3-sonnet", **kwargs):
         super().__init__(model, **kwargs)
         self.region = kwargs.get("region", "us-east-1")
         self.access_key = kwargs.get("access_key") or os.getenv("AWS_ACCESS_KEY_ID")
         self.secret_key = kwargs.get("secret_key") or os.getenv("AWS_SECRET_ACCESS_KEY")
-    
+
     async def execute(
         self,
         messages: List[Dict[str, str]],
@@ -710,7 +710,7 @@ class AWSBedrockProvider(LLMProvider):
     ) -> LLMResponse:
         """Execute AWS Bedrock completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="aws_bedrock",
@@ -725,7 +725,7 @@ class AWSBedrockProvider(LLMProvider):
                 import json
             except ImportError:
                 raise ImportError("AWS SDK not installed. Run: pip install boto3")
-            
+
             # Create Bedrock client
             session = boto3.Session(
                 aws_access_key_id=self.access_key,
@@ -733,7 +733,7 @@ class AWSBedrockProvider(LLMProvider):
                 region_name=self.region
             )
             bedrock = session.client('bedrock-runtime')
-            
+
             # Prepare payload based on model type
             if "claude" in self.model.lower():
                 # Anthropic Claude format for Bedrock
@@ -742,16 +742,16 @@ class AWSBedrockProvider(LLMProvider):
                 for msg in messages:
                     role = msg.get("role", "user")
                     content = msg.get("content", "")
-                    
+
                     if role == "system":
                         conversation = f"System: {content}\n\n{conversation}"
                     elif role == "user":
                         conversation += f"Human: {content}\n\n"
                     elif role == "assistant":
                         conversation += f"Assistant: {content}\n\n"
-                
+
                 conversation += "Assistant:"
-                
+
                 payload = {
                     "prompt": conversation,
                     "max_tokens_to_sample": kwargs.get("max_tokens", self.config.get("max_tokens", 1000)),
@@ -759,7 +759,7 @@ class AWSBedrockProvider(LLMProvider):
                     "top_p": kwargs.get("top_p", self.config.get("top_p", 1.0)),
                     "stop_sequences": kwargs.get("stop_sequences", self.config.get("stop_sequences", []))
                 }
-                
+
             elif "llama" in self.model.lower() or "mistral" in self.model.lower():
                 # Meta Llama or Mistral format
                 conversation = ""
@@ -767,21 +767,21 @@ class AWSBedrockProvider(LLMProvider):
                     role = msg.get("role", "user")
                     content = msg.get("content", "")
                     conversation += f"<{role}>{content}</{role}>\n"
-                
+
                 payload = {
                     "prompt": conversation,
                     "max_gen_len": kwargs.get("max_tokens", self.config.get("max_tokens", 1000)),
                     "temperature": kwargs.get("temperature", self.config.get("temperature", 0.7)),
                     "top_p": kwargs.get("top_p", self.config.get("top_p", 1.0)),
                 }
-                
+
             elif "titan" in self.model.lower():
                 # Amazon Titan format
                 input_text = ""
                 for msg in messages:
                     content = msg.get("content", "")
                     input_text += content + " "
-                
+
                 payload = {
                     "inputText": input_text.strip(),
                     "textGenerationConfig": {
@@ -799,7 +799,7 @@ class AWSBedrockProvider(LLMProvider):
                     "max_tokens": kwargs.get("max_tokens", self.config.get("max_tokens", 1000)),
                     "temperature": kwargs.get("temperature", self.config.get("temperature", 0.7)),
                 }
-            
+
             # Make API call
             response = bedrock.invoke_model(
                 modelId=self.model,
@@ -807,10 +807,10 @@ class AWSBedrockProvider(LLMProvider):
                 contentType='application/json',
                 accept='application/json'
             )
-            
+
             # Parse response
             response_body = json.loads(response['body'].read())
-            
+
             # Extract content based on model type
             if "claude" in self.model.lower():
                 content = response_body.get('completion', '')
@@ -833,7 +833,7 @@ class AWSBedrockProvider(LLMProvider):
                     "output_tokens": len(content.split()) * 0.75,
                     "total_tokens": (len(str(payload).split()) + len(content.split())) * 0.75
                 }
-            
+
             # Build metadata
             metadata = {
                 "provider": "aws_bedrock",
@@ -842,14 +842,14 @@ class AWSBedrockProvider(LLMProvider):
                 "response_metadata": response.get('ResponseMetadata', {}),
                 "execution_time": time.time() - start_time
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
                 metadata=metadata,
                 usage=usage
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="aws_bedrock",
@@ -858,12 +858,12 @@ class AWSBedrockProvider(LLMProvider):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except Exception as e:
             raise RuntimeError(f"AWS Bedrock execution failed: {e}")
-    
+
     def validate_config(self) -> bool:
         """Validate AWS Bedrock configuration."""
         return bool(self.model and self.region)
@@ -871,17 +871,17 @@ class AWSBedrockProvider(LLMProvider):
 
 class AzureOpenAIProvider(LLMProvider):
     """Azure OpenAI LLM provider."""
-    
+
     def __init__(self, model: str = "gpt-35-turbo", **kwargs):
         api_key = kwargs.get("api_key") or os.getenv("AZURE_OPENAI_API_KEY")
         super().__init__(model, api_key, **kwargs)
-        
+
         self.endpoint = kwargs.get("endpoint") or os.getenv("AZURE_OPENAI_ENDPOINT")
         self.api_version = kwargs.get("api_version", "2023-12-01-preview")
-        
+
         if not self.api_key or not self.endpoint:
             raise ValueError("Azure OpenAI API key and endpoint required")
-    
+
     async def execute(
         self,
         messages: List[Dict[str, str]],
@@ -890,7 +890,7 @@ class AzureOpenAIProvider(LLMProvider):
     ) -> LLMResponse:
         """Execute Azure OpenAI completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="azure_openai",
@@ -904,14 +904,14 @@ class AzureOpenAIProvider(LLMProvider):
                 from openai import AsyncAzureOpenAI
             except ImportError:
                 raise ImportError("OpenAI package not installed. Run: pip install openai")
-            
+
             # Create Azure OpenAI client
             client = AsyncAzureOpenAI(
                 api_key=self.api_key,
                 api_version=self.api_version,
                 azure_endpoint=self.endpoint
             )
-            
+
             # Prepare parameters
             params = {
                 "model": self.model,
@@ -922,18 +922,18 @@ class AzureOpenAIProvider(LLMProvider):
                 "frequency_penalty": kwargs.get("frequency_penalty", self.config.get("frequency_penalty", 0.0)),
                 "presence_penalty": kwargs.get("presence_penalty", self.config.get("presence_penalty", 0.0)),
             }
-            
+
             # Add tools if provided in context
             if context and "tools" in context:
                 params["tools"] = context["tools"]
                 params["tool_choice"] = context.get("tool_choice", "auto")
-            
+
             # Make API call
             response = await client.chat.completions.create(**params)
-            
+
             # Extract content
             content = response.choices[0].message.content or ""
-            
+
             # Build metadata
             metadata = {
                 "provider": "azure_openai",
@@ -942,7 +942,7 @@ class AzureOpenAIProvider(LLMProvider):
                 "api_version": self.api_version,
                 "finish_reason": response.choices[0].finish_reason,
             }
-            
+
             # Add tool calls if present
             if response.choices[0].message.tool_calls:
                 metadata["tool_calls"] = [
@@ -956,21 +956,21 @@ class AzureOpenAIProvider(LLMProvider):
                     }
                     for tool_call in response.choices[0].message.tool_calls
                 ]
-            
+
             # Extract usage information
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens,
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
                 metadata=metadata,
                 usage=usage
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="azure_openai",
@@ -979,12 +979,12 @@ class AzureOpenAIProvider(LLMProvider):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except Exception as e:
             raise RuntimeError(f"Azure OpenAI execution failed: {e}")
-    
+
     def validate_config(self) -> bool:
         """Validate Azure OpenAI configuration."""
         return bool(self.api_key and self.endpoint and self.model)
@@ -992,14 +992,14 @@ class AzureOpenAIProvider(LLMProvider):
 
 class TogetherProvider(LLMProvider):
     """Together AI LLM provider."""
-    
+
     def __init__(self, model: str = "meta-llama/Llama-2-7b-chat-hf", **kwargs):
         api_key = kwargs.get("api_key") or os.getenv("TOGETHER_API_KEY")
         super().__init__(model, api_key, **kwargs)
-        
+
         if not self.api_key:
             raise ValueError("Together AI API key not provided")
-        
+
         self.base_url = kwargs.get("base_url", "https://api.together.xyz/v1")
     async def execute(
         self,
@@ -1009,7 +1009,7 @@ class TogetherProvider(LLMProvider):
     ) -> LLMResponse:
         """Execute Together AI completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="together",
@@ -1023,13 +1023,13 @@ class TogetherProvider(LLMProvider):
                 from openai import AsyncOpenAI
             except ImportError:
                 raise ImportError("OpenAI package not installed. Run: pip install openai")
-            
+
             # Create client with Together AI endpoint
             client = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url
             )
-            
+
             # Prepare parameters
             params = {
                 "model": self.model,
@@ -1041,34 +1041,34 @@ class TogetherProvider(LLMProvider):
                 "presence_penalty": kwargs.get("presence_penalty", self.config.get("presence_penalty", 0.0)),
                 "stream": False
             }
-            
+
             # Make API call
             response = await client.chat.completions.create(**params)
-            
+
             # Extract content
             content = response.choices[0].message.content or ""
-            
+
             # Build metadata
             metadata = {
                 "provider": "together",
                 "model": self.model,
                 "finish_reason": response.choices[0].finish_reason,
             }
-            
+
             # Extract usage information
             usage = {
                 "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
                 "completion_tokens": response.usage.completion_tokens if response.usage else 0,
                 "total_tokens": response.usage.total_tokens if response.usage else 0,
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
                 metadata=metadata,
                 usage=usage
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="together",
@@ -1077,12 +1077,12 @@ class TogetherProvider(LLMProvider):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except Exception as e:
             raise RuntimeError(f"Together AI execution failed: {e}")
-    
+
     def validate_config(self) -> bool:
         """Validate Together AI configuration."""
         return bool(self.api_key and self.model)
@@ -1090,17 +1090,17 @@ class TogetherProvider(LLMProvider):
 
 class OllamaProvider(LLMProvider):
     """Ollama LLM provider for local models."""
-    
+
     def __init__(self, model: str = "llama3", **kwargs):
         # Set attributes before calling super().__init__ so validate_config works
         self.base_url = kwargs.get("base_url", "http://localhost:11434")
         self.timeout = kwargs.get("timeout", 300)  # 5 minutes default timeout
         super().__init__(model, None, **kwargs)  # No API key needed for local Ollama
-    
+
     def get_supported_parameters(self) -> List[str]:
         """Get supported parameters for Ollama."""
         return ["temperature", "top_p", "top_k", "num_predict", "repeat_penalty", "seed"]
-    
+
     async def execute(
         self,
         messages: List[Dict[str, str]],
@@ -1109,7 +1109,7 @@ class OllamaProvider(LLMProvider):
     ) -> LLMResponse:
         """Execute Ollama completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="ollama",
@@ -1127,7 +1127,7 @@ class OllamaProvider(LLMProvider):
                 import urllib.request
                 import urllib.parse
                 use_aiohttp = False
-            
+
             # Convert messages to prompt format
             prompt = ""
             for msg in messages:
@@ -1139,9 +1139,9 @@ class OllamaProvider(LLMProvider):
                     prompt += f"User: {content}\n"
                 elif role == "assistant":
                     prompt += f"Assistant: {content}\n"
-            
+
             prompt += "Assistant: "
-            
+
             # Sanitize and prepare parameters
             sanitized_params = self._sanitize_parameters(**kwargs)
             options = {
@@ -1149,13 +1149,13 @@ class OllamaProvider(LLMProvider):
                 "top_p": sanitized_params.get("top_p", self.config.get("top_p", 1.0)),
                 "num_predict": sanitized_params.get("max_tokens", self.config.get("max_tokens", 1000)),
             }
-            
+
             # Add optional parameters
             for param in ["top_k", "repeat_penalty", "seed"]:
                 value = sanitized_params.get(param, self.config.get(param))
                 if value is not None:
                     options[param] = value
-            
+
             # Prepare payload
             payload = {
                 "model": self.model,
@@ -1163,7 +1163,7 @@ class OllamaProvider(LLMProvider):
                 "stream": False,
                 "options": options
             }
-            
+
             # Make API call
             if use_aiohttp:
                 async with aiohttp.ClientSession() as session:
@@ -1175,7 +1175,7 @@ class OllamaProvider(LLMProvider):
                         if response.status != 200:
                             error_text = await response.text()
                             raise RuntimeError(f"Ollama API returned status {response.status}: {error_text}")
-                        
+
                         result = await response.json()
             else:
                 # Fallback to urllib (synchronous)
@@ -1190,10 +1190,10 @@ class OllamaProvider(LLMProvider):
                     if response.status != 200:
                         raise RuntimeError(f"Ollama API returned status {response.status}")
                     result = json_lib.loads(response.read().decode('utf-8'))
-            
+
             # Extract content
             content = result.get("response", "")
-            
+
             # Build metadata
             metadata = {
                 "provider": "ollama",
@@ -1205,14 +1205,14 @@ class OllamaProvider(LLMProvider):
                 "prompt_eval_count": result.get("prompt_eval_count", 0),
                 "prompt_eval_duration": result.get("prompt_eval_duration", 0),
             }
-            
+
             # Extract usage information
             usage = {
                 "prompt_tokens": result.get("prompt_eval_count", 0),
                 "completion_tokens": result.get("eval_count", 0),
                 "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0),
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
@@ -1220,7 +1220,7 @@ class OllamaProvider(LLMProvider):
                 usage=usage,
                 finish_reason="stop" if result.get("done", False) else "length"
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="ollama",
@@ -1229,13 +1229,13 @@ class OllamaProvider(LLMProvider):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except Exception as e:
             logger.error(f"Ollama execution failed: {e}")
             raise RuntimeError(f"Ollama execution failed: {e}")
-    
+
     def validate_config(self) -> bool:
         """Validate Ollama configuration."""
         return bool(self.model and self.base_url)
@@ -1243,21 +1243,21 @@ class OllamaProvider(LLMProvider):
 
 class HuggingFaceProvider(LLMProvider):
     """Hugging Face Inference API provider."""
-    
+
     def __init__(self, model: str = "microsoft/DialoGPT-medium", **kwargs):
         api_key = kwargs.get("api_key") or os.getenv("HUGGINGFACE_API_KEY")
         super().__init__(model, api_key, **kwargs)
-        
+
         if not self.api_key:
             raise ValueError("Hugging Face API key not provided")
-        
+
         self.base_url = kwargs.get("base_url", "https://api-inference.huggingface.co")
         self.timeout = kwargs.get("timeout", 60)
-    
+
     def get_supported_parameters(self) -> List[str]:
         """Get supported parameters for Hugging Face."""
         return ["temperature", "max_new_tokens", "top_p", "top_k", "repetition_penalty", "seed"]
-    
+
     async def execute(
         self,
         messages: List[Dict[str, str]],
@@ -1266,7 +1266,7 @@ class HuggingFaceProvider(LLMProvider):
     ) -> LLMResponse:
         """Execute Hugging Face completion."""
         start_time = time.time()
-        
+
         # Log the request
         logger.log_llm_request(
             provider="huggingface",
@@ -1284,7 +1284,7 @@ class HuggingFaceProvider(LLMProvider):
                 import urllib.request
                 import urllib.parse
                 use_aiohttp = False
-            
+
             # Convert messages to text input
             input_text = ""
             for msg in messages:
@@ -1296,7 +1296,7 @@ class HuggingFaceProvider(LLMProvider):
                     input_text += f"User: {content}\n"
                 elif role == "assistant":
                     input_text += f"Assistant: {content}\n"
-            
+
             # Sanitize and prepare parameters
             sanitized_params = self._sanitize_parameters(**kwargs)
             parameters = {
@@ -1305,25 +1305,25 @@ class HuggingFaceProvider(LLMProvider):
                 "top_p": sanitized_params.get("top_p", self.config.get("top_p", 1.0)),
                 "return_full_text": False
             }
-            
+
             # Add optional parameters
             for param in ["top_k", "repetition_penalty", "seed"]:
                 value = sanitized_params.get(param, self.config.get(param))
                 if value is not None:
                     parameters[param] = value
-            
+
             # Prepare payload
             payload = {
                 "inputs": input_text.strip(),
                 "parameters": parameters
             }
-            
+
             # Prepare headers
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
+
             # Make API call
             if use_aiohttp:
                 async with aiohttp.ClientSession() as session:
@@ -1339,7 +1339,7 @@ class HuggingFaceProvider(LLMProvider):
                         elif response.status != 200:
                             error_text = await response.text()
                             raise RuntimeError(f"Hugging Face API returned status {response.status}: {error_text}")
-                        
+
                         result = await response.json()
             else:
                 # Fallback to urllib (synchronous)
@@ -1359,7 +1359,7 @@ class HuggingFaceProvider(LLMProvider):
                     if e.code == 503:
                         raise RuntimeError("Model is loading. Please try again in a few minutes.")
                     raise RuntimeError(f"Hugging Face API error: {e}")
-            
+
             # Extract content
             content = ""
             if isinstance(result, list) and len(result) > 0:
@@ -1371,14 +1371,14 @@ class HuggingFaceProvider(LLMProvider):
                 content = result.get("generated_text", str(result))
             else:
                 content = str(result)
-            
+
             # Build metadata
             metadata = {
                 "provider": "huggingface",
                 "model": self.model,
                 "base_url": self.base_url,
             }
-            
+
             # Extract usage information (HF doesn't provide detailed usage)
             input_tokens = len(input_text.split()) * 0.75  # Rough estimate
             output_tokens = len(content.split()) * 0.75
@@ -1387,7 +1387,7 @@ class HuggingFaceProvider(LLMProvider):
                 "completion_tokens": int(output_tokens),
                 "total_tokens": int(input_tokens + output_tokens),
             }
-            
+
             # Create response object
             llm_response = LLMResponse(
                 content=content,
@@ -1395,7 +1395,7 @@ class HuggingFaceProvider(LLMProvider):
                 usage=usage,
                 finish_reason="stop"
             )
-            
+
             # Log the response
             logger.log_llm_response(
                 provider="huggingface",
@@ -1404,13 +1404,13 @@ class HuggingFaceProvider(LLMProvider):
                 metadata=metadata,
                 usage=usage
             )
-            
+
             return llm_response
-            
+
         except Exception as e:
             logger.error(f"Hugging Face execution failed: {e}")
             raise RuntimeError(f"Hugging Face execution failed: {e}")
-    
+
     def validate_config(self) -> bool:
         """Validate Hugging Face configuration."""
         return bool(self.api_key and self.model)
@@ -1435,15 +1435,15 @@ def get_llm_provider(
 ) -> LLMProvider:
     """
     Get an LLM provider instance.
-    
+
     Args:
         provider: Provider type (openai, anthropic, aws, azure, together, ollama, huggingface)
         model: Model name
         **kwargs: Additional configuration (api_key, timeout, retry_config, etc.)
-        
+
     Returns:
         LLMProvider instance
-        
+
     Raises:
         ValueError: If provider is not supported or configuration is invalid
     """
@@ -1452,12 +1452,12 @@ def get_llm_provider(
     except ValueError:
         available = ", ".join([p.value for p in LLMProviderType])
         raise ValueError(f"Unsupported provider: {provider}. Available: {available}")
-    
+
     if provider_type not in PROVIDER_REGISTRY:
         raise ValueError(f"Provider {provider_type} not implemented")
-    
+
     provider_class = PROVIDER_REGISTRY[provider_type]
-    
+
     try:
         return provider_class(model=model, **kwargs)
     except Exception as e:
@@ -1473,10 +1473,10 @@ def list_available_providers() -> List[str]:
 def get_provider_info(provider: str) -> Dict[str, Any]:
     """
     Get information about a specific provider.
-    
+
     Args:
         provider: Provider type
-        
+
     Returns:
         Dict containing provider information
     """
@@ -1484,12 +1484,12 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
         provider_type = LLMProviderType(provider.lower())
     except ValueError:
         raise ValueError(f"Unsupported provider: {provider}")
-    
+
     if provider_type not in PROVIDER_REGISTRY:
         raise ValueError(f"Provider {provider_type} not implemented")
-    
+
     provider_class = PROVIDER_REGISTRY[provider_type]
-    
+
     # Create a temporary instance to get supported parameters
     # Note: This might fail if required config is missing, so we catch exceptions
     try:
@@ -1497,7 +1497,7 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
         supported_params = temp_instance.get_supported_parameters()
     except:
         supported_params = ["temperature", "max_tokens", "top_p"]  # Common defaults
-    
+
     return {
         "name": provider_type.value,
         "class": provider_class.__name__,
@@ -1510,28 +1510,28 @@ def get_provider_info(provider: str) -> Dict[str, Any]:
 async def health_check_provider(provider: LLMProvider) -> Dict[str, Any]:
     """
     Perform a health check on a provider.
-    
+
     Args:
         provider: LLM provider instance
-        
+
     Returns:
         Dict containing health check results
     """
     start_time = asyncio.get_event_loop().time()
-    
+
     try:
         # Validate configuration
         config_valid = provider.validate_config()
-        
+
         # Test with a simple message
         test_messages = [{"role": "user", "content": "Hello"}]
-        
+
         # Try to execute a simple request
         response = await provider.execute(test_messages, max_tokens=10)
-        
+
         end_time = asyncio.get_event_loop().time()
         response_time = end_time - start_time
-        
+
         return {
             "status": "healthy",
             "config_valid": config_valid,
@@ -1540,11 +1540,11 @@ async def health_check_provider(provider: LLMProvider) -> Dict[str, Any]:
             "total_tokens": response.total_tokens,
             "error": None
         }
-        
+
     except Exception as e:
         end_time = asyncio.get_event_loop().time()
         response_time = end_time - start_time
-        
+
         return {
             "status": "unhealthy",
             "config_valid": provider.validate_config(),
@@ -1558,13 +1558,13 @@ async def health_check_provider(provider: LLMProvider) -> Dict[str, Any]:
 def create_provider_from_config(config: Dict[str, Any]) -> LLMProvider:
     """
     Create a provider from a configuration dictionary.
-    
+
     Args:
         config: Configuration dictionary with 'provider', 'model', and other options
-        
+
     Returns:
         LLM provider instance
-        
+
     Example:
         config = {
             "provider": "openai",
@@ -1577,11 +1577,11 @@ def create_provider_from_config(config: Dict[str, Any]) -> LLMProvider:
     """
     if "provider" not in config:
         raise ValueError("Configuration must include 'provider' field")
-    
+
     if "model" not in config:
         raise ValueError("Configuration must include 'model' field")
-    
+
     provider_type = config.pop("provider")
     model = config.pop("model")
-    
+
     return get_llm_provider(provider_type, model, **config)

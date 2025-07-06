@@ -191,11 +191,13 @@ Use these to implement and run your tests.
 
     async def write_tests(
         self,
-        code_path: str,
-        test_types: List[str],
         context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Write tests for the given code using LLM decisions"""
+        # Extract test parameters from context
+        code_path = getattr(context, 'project_path', './lib')
+        test_types = getattr(context, 'metadata', {}).get('test_types', ['unit', 'widget', 'integration'])
+
         task = f"""
         Write comprehensive Flutter tests for the code at: {code_path}
 

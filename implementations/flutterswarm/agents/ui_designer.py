@@ -311,11 +311,13 @@ Use these to implement your UI designs.
 
     async def design_ui(
         self,
-        ui_requirements: str,
-        design_constraints: Dict[str, Any],
         context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Design UI using LLM analysis"""
+        # Extract UI requirements and design constraints from context
+        ui_requirements = getattr(context, 'metadata', {}).get('app_description', 'Flutter app UI')
+        design_constraints = getattr(context, 'metadata', {}).get('design_requirements', {})
+
         task = f"""
         Design Flutter UI for: {ui_requirements}
 

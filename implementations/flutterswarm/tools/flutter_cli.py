@@ -221,20 +221,23 @@ class FlutterCLITool:
 
         # Build arguments
         args = [project_name]
-        options = {}
 
         if template:
-            options["--template"] = template
+            args.extend(["--template", template])
         if org:
-            options["--org"] = org
+            args.extend(["--org", org])
         if platforms:
-            options["--platforms"] = ",".join(platforms)
+            args.extend(["--platforms", ",".join(platforms)])
 
-        # Add any additional options
-        options.update(kwargs)
+        # Add any additional options from kwargs
+        for key, value in kwargs.items():
+            if key.startswith("--"):
+                args.extend([key, str(value)])
+            else:
+                args.extend([f"--{key}", str(value)])
 
         # Execute create command
-        result = await self.execute("create", args, options, timeout=600, check_doctor=True)
+        result = await self.execute("create", args, timeout=600)
 
         # If creation failed, try to clean up
         if not result["success"] and os.path.exists(project_path):

@@ -355,43 +355,59 @@ Use these tools to execute the plans you create.
         """Agent determines optimal Flutter project structure and sets it up, including running 'flutter create'."""
         self.logger.info("Setting up project structure...")
         try:
-            # Validate project name
-            project_name = getattr(context, 'project_name', None) or getattr(context, 'app_name', None) or "my_flutter_app"
-            platforms = getattr(context, 'platforms', None) or ["ios", "android"]
-            # Call flutter_cli.create_project to bootstrap the project
-            create_result = await self.flutter_cli.create_project(
-                project_name=project_name,
-                platforms=platforms
-            )
-            if not create_result.get("success", False):
-                self.logger.error(f"flutter create failed: {create_result.get('error')}")
-                return ExecutionResult(success=False, error=create_result.get("error"))
+            # Check if we're already in a Flutter project
+            import os
+            pubspec_path = os.path.join(context.project_path, "pubspec.yaml")
+            if os.path.exists(pubspec_path):
+                self.logger.info("Flutter project already exists, skipping flutter create")
+                create_result = {"success": True, "message": "Project already exists"}
+            else:
+                # Validate project name
+                project_name = getattr(context, 'project_name', None) or getattr(context, 'app_name', None) or "my_flutter_app"
+                platforms = getattr(context, 'platforms', None) or ["ios", "android"]
+                # Call flutter_cli.create_project to bootstrap the project
+                create_result = await self.flutter_cli.create_project(
+                    project_name=project_name,
+                    platforms=platforms
+                )
+                if not create_result.get("success", False):
+                    self.logger.error(f"flutter create failed: {create_result.get('error')}")
+                    return ExecutionResult(success=False, error_message=create_result.get("error"), agent_name=self.name, task_id="setup_project_structure")
             # LLM decides what directories are needed (optional, after flutter create)
-            structure_plan = await self.llm_provider.generate_response(
-                f"What additional directory structure is needed for a Flutter project with requirements: {getattr(context, 'requirements', '')}"
-            )
+            structure_response = await self.llm_provider.execute([
+                {"role": "user", "content": f"What additional directory structure is needed for a Flutter project with requirements: {getattr(context, 'requirements', '')}? Respond with a JSON object containing a 'directories' array."}
+            ])
+            # Parse the response to get directory structure
+            structure_plan = {"directories": []}  # Default fallback
+            try:
+                import json
+                structure_plan = json.loads(structure_response.content)
+            except:
+                # If parsing fails, use default
+                structure_plan = {"directories": []}
+
             for directory in structure_plan.get('directories', []):
                 await self.file_system.create_directory(directory)
-            return ExecutionResult(success=True, result={"structure_plan": structure_plan, "flutter_create": create_result})
+            return ExecutionResult(success=True, agent_name=self.name, task_id="setup_project_structure", output={"structure_plan": structure_plan, "flutter_create": create_result})
         except Exception as e:
             self.logger.error(f"Project structure setup failed: {e}")
-            return ExecutionResult(success=False, error=str(e))
+            return ExecutionResult(success=False, error_message=str(e), agent_name=self.name, task_id="setup_project_structure")
 
     async def validate_dependencies(self, dependencies: List[str], context: TaskContext) -> ExecutionResult:
         """Agent validates Flutter dependencies using LLM knowledge and Dart CLI."""
         self.logger.info(f"Validating dependencies: {dependencies}")
         try:
-            validation_plan = await self.llm_provider.generate_response(
-                f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed?"
-            )
+            validation_response = await self.llm_provider.execute([
+                {"role": "user", "content": f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed?"}
+            ])
             results = {}
             for dependency in dependencies:
                 pub_info = await self.dart_cli.execute("pub", ["deps", dependency])
-                compatibility = await self.llm_provider.generate_response(
-                    f"Is {dependency} compatible? pub info: {pub_info.get('output')}"
-                )
-                results[dependency] = compatibility
+                compatibility_response = await self.llm_provider.execute([
+                    {"role": "user", "content": f"Is {dependency} compatible? pub info: {pub_info.get('output')}"}
+                ])
+                results[dependency] = compatibility_response.content
             return ExecutionResult(success=True, result=results)
         except Exception as e:
             self.logger.error(f"Dependency validation failed: {e}")
-            return ExecutionResult(success=False, error=str(e))
+            return ExecutionResult(success=False, error_message=str(e), agent_name=self.name, task_id="validate_dependencies")
