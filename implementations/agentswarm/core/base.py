@@ -3,21 +3,30 @@ Base classes for all AgentSwarm implementations.
 Uses MultiAgenticSwarm as the foundational SDK.
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional, Union
-import logging
 import asyncio
+import json
+import logging
 import time
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Union
 
 # Import MultiAgenticSwarm as the core SDK
 try:
     import multiagenticswarm as mas
+
     MAS_AVAILABLE = True
 except ImportError:
     MAS_AVAILABLE = False
     mas = None
 
-from .types import AgentRole, TaskContext, ExecutionResult, CollaborationPattern, WorkflowPattern
+from .types import (
+    AgentRole,
+    CollaborationPattern,
+    ExecutionResult,
+    TaskContext,
+    WorkflowPattern,
+)
+
 
 class BaseAgent(mas.Agent if MAS_AVAILABLE else ABC):
     """
@@ -36,7 +45,7 @@ class BaseAgent(mas.Agent if MAS_AVAILABLE else ABC):
         llm_provider: str = "openai",
         llm_model: str = "gpt-4",
         temperature: float = 0.7,
-        **kwargs
+        **kwargs,
     ):
         if not MAS_AVAILABLE:
             raise ImportError("MultiAgenticSwarm is required but not available")
@@ -55,7 +64,7 @@ class BaseAgent(mas.Agent if MAS_AVAILABLE else ABC):
             system_prompt=system_prompt,
             llm_provider=llm_provider,
             llm_model=llm_model,
-            llm_config={"temperature": temperature, **kwargs}
+            llm_config={"temperature": temperature, **kwargs},
         )
 
         # Register tools with MAS system
@@ -98,9 +107,11 @@ Your core responsibilities:
 
     def get_available_tools(self, system_tools):
         """Get available tools for this agent from system tools"""
-        return [tool for tool in system_tools.values()
-                if hasattr(tool, 'is_available_to') and
-                tool.is_available_to(self.name)]
+        return [
+            tool
+            for tool in system_tools.values()
+            if hasattr(tool, "is_available_to") and tool.is_available_to(self.name)
+        ]
 
     def _get_tools_information(self) -> str:
         """Get information about available tools"""
@@ -134,7 +145,7 @@ Your core responsibilities:
                         func=tool_def.get("func"),
                         name=tool_def.get("name"),
                         description=tool_def.get("description", ""),
-                        parameters=tool_def.get("parameters", {})
+                        parameters=tool_def.get("parameters", {}),
                     )
 
                     # Set tool sharing level
@@ -152,10 +163,12 @@ Your core responsibilities:
                     self.mas_system.register_tool(mas_tool)
 
                 except Exception as e:
-                    self.logger.warning(f"Failed to register tool {tool_def.get('name', 'unknown')}: {e}")
+                    self.logger.warning(
+                        f"Failed to register tool {tool_def.get('name', 'unknown')}: {e}"
+                    )
             else:
                 # Handle object format - assume it's already a proper MAS tool
-                if hasattr(tool_def, 'set_local'):
+                if hasattr(tool_def, "set_local"):
                     tool_def.set_local(self)
                 self.mas_system.register_tool(tool_def)
 
@@ -168,7 +181,7 @@ Your core responsibilities:
         tool_registry: Optional[Dict[str, Any]] = None,
         # Support MAS system parameters
         input_text: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[ExecutionResult, Dict[str, Any]]:
         """Execute task using MAS infrastructure with flexible signature"""
 
@@ -177,11 +190,13 @@ Your core responsibilities:
             # This is a MAS system call - delegate to the parent class
             return await super().execute(
                 input_text=input_text,
-                context=context if isinstance(context, dict) else (context.__dict__ if context else None),
+                context=context
+                if isinstance(context, dict)
+                else (context.__dict__ if context else None),
                 tool_executor=tool_executor,
                 available_tools=available_tools,
                 tool_registry=tool_registry,
-                **kwargs
+                **kwargs,
             )
 
         # Handle AgentSwarm-style calls
@@ -204,14 +219,76 @@ Your core responsibilities:
         start_time = time.time()
 
         try:
-            # Use MAS agent execution directly (we inherit from mas.Agent)
-            result = await super().execute(
-                input_text=task_input,
-                context=context.__dict__ if context else None,
-                tool_executor=None,
-                available_tools=None,
-                tool_registry=None
-            )
+            # Use MAS agent execution with tool support
+            messages = [
+                {"role": "system", "content": self._build_instructions()},
+                {"role": "user", "content": task_input},
+            ]
+
+            # Get properly formatted tools
+            tools = self._get_tools()
+            formatted_tools = []
+            for tool in tools:
+                if isinstance(tool, dict) and "function" in tool:
+                    formatted_tools.append(
+                        {"type": "function", "function": tool["function"]}
+                    )
+
+            # Call LLM with tool support
+            if formatted_tools:
+                self.logger.info(
+                    f"Calling LLM with {len(formatted_tools)} tools available"
+                )
+
+                # The MAS Agent.execute method doesn't accept tools parameter directly
+                # Instead, we need to make tools available through the tool_registry
+                tool_registry = {}
+                for tool in formatted_tools:
+                    tool_name = tool.get("function", {}).get("name", "unknown")
+                    tool_registry[tool_name] = tool
+
+                result = await super().execute(
+                    input_text=task_input,
+                    context=context.__dict__ if context else None,
+                    tool_registry=tool_registry,
+                )
+
+                # Handle tool calls if present
+                if hasattr(result, "tool_calls") and result.tool_calls:
+                    self.logger.info(f"Processing {len(result.tool_calls)} tool calls")
+                    tool_results = await self._execute_tool_calls(result.tool_calls)
+
+                    # Add tool results to the response
+                    if hasattr(result, "content"):
+                        result.content += f"\n\nTool execution results: {tool_results}"
+                    else:
+                        result = f"{result}\n\nTool execution results: {tool_results}"
+
+                    # Log tool execution summary
+                    created_files = []
+                    created_dirs = []
+                    for tool_result in tool_results:
+                        if "result" in tool_result and isinstance(
+                            tool_result["result"], dict
+                        ):
+                            tr = tool_result["result"]
+                            if tr.get("success") and "write" in str(tr):
+                                created_files.append(tr.get("path", "unknown"))
+                            elif tr.get("success") and "mkdir" in str(tr):
+                                created_dirs.append(tr.get("path", "unknown"))
+
+                    self.logger.info(
+                        f"Created {len(created_files)} files: {created_files}"
+                    )
+                    self.logger.info(
+                        f"Created {len(created_dirs)} directories: {created_dirs}"
+                    )
+
+            else:
+                # No tools available - use standard execution
+                result = await super().execute(
+                    input_text=task_input, context=context.__dict__ if context else None
+                )
 
             execution_time = time.time() - start_time
 
@@ -222,7 +299,7 @@ Your core responsibilities:
                 task_id=f"{self.name}_task_{len(self.execution_history)}",
                 output=result,
                 execution_time=execution_time,
-                metadata={"task": task_or_input}
+                metadata={"task": task_or_input, "tools_used": len(formatted_tools)},
             )
 
             # Store in history
@@ -240,7 +317,7 @@ Your core responsibilities:
                 task_id=f"{self.name}_task_{len(self.execution_history)}",
                 error_message=str(e),
                 execution_time=execution_time,
-                metadata={"task": task_or_input}
+                metadata={"task": task_or_input},
             )
 
             self.execution_history.append(execution_result)
@@ -249,9 +326,9 @@ Your core responsibilities:
 
     async def collaborate(
         self,
-        other_agents: List['BaseAgent'],
+        other_agents: List["BaseAgent"],
         task: Dict[str, Any],
-        pattern: Optional[CollaborationPattern] = None
+        pattern: Optional[CollaborationPattern] = None,
     ) -> List[ExecutionResult]:
         """Collaborate with other agents using MAS Task and Collaboration system"""
 
@@ -262,16 +339,92 @@ Your core responsibilities:
         collaboration = mas.Collaboration(
             name=f"collaboration_{len(self.execution_history)}",
             description=task.get("description", "Multi-agent collaboration"),
-            agents=[self] + other_agents
+            agents=[self] + other_agents,
         )
 
         # Execute collaboration using MAS system
         result = await self.mas_system.execute_collaboration(
-            collaboration=collaboration,
-            task=task
+            collaboration=collaboration, task=task
         )
 
         return [result]  # MAS returns a single result that we wrap in a list
+
+    async def _execute_tool_calls(self, tool_calls: List[Any]) -> List[Dict[str, Any]]:
+        """Execute tool calls and return results"""
+        results = []
+
+        for tool_call in tool_calls:
+            try:
+                # Handle different tool call formats
+                if hasattr(tool_call, "function"):
+                    # OpenAI-style tool call
+                    tool_name = tool_call.function.name
+                    import json
+
+                    arguments = json.loads(tool_call.function.arguments)
+                    tool_call_id = getattr(tool_call, "id", None)
+                elif isinstance(tool_call, dict):
+                    # Dictionary-style tool call
+                    tool_name = tool_call.get("name") or tool_call.get(
+                        "function", {}
+                    ).get("name")
+                    arguments = tool_call.get("arguments", {})
+                    tool_call_id = tool_call.get("id")
+                else:
+                    self.logger.warning(f"Unknown tool call format: {type(tool_call)}")
+                    continue
+
+                # Find the tool function
+                tool_func = None
+                for tool_def in self._get_tools():
+                    if isinstance(tool_def, dict):
+                        if (
+                            tool_def.get("name") == tool_name
+                            or tool_def.get("function", {}).get("name") == tool_name
+                        ):
+                            tool_func = tool_def.get("func")
+                            break
+
+                if tool_func is None:
+                    self.logger.error(f"Tool function not found: {tool_name}")
+                    results.append(
+                        {
+                            "tool_call_id": tool_call_id,
+                            "error": f"Tool function not found: {tool_name}",
+                        }
+                    )
+                    continue
+
+                # Execute the tool
+                self.logger.info(f"Executing tool: {tool_name} with args: {arguments}")
+
+                if tool_name == "file_system":
+                    result = await tool_func(
+                        arguments.get("operation"),
+                        arguments.get("path"),
+                        content=arguments.get("content"),
+                        encoding=arguments.get("encoding", "utf-8"),
+                        create_dirs=arguments.get("create_dirs", True),
+                    )
+                elif tool_name in ["flutter_cli", "dart_cli"]:
+                    result = await tool_func(
+                        arguments.get("command"), arguments.get("args", [])
+                    )
+                else:
+                    # Generic tool call
+                    result = await tool_func(**arguments)
+
+                results.append({"tool_call_id": tool_call_id, "result": result})
+
+                self.logger.info(f"Tool {tool_name} executed successfully")
+
+            except Exception as e:
+                self.logger.error(f"Tool execution failed: {str(e)}")
+                results.append(
+                    {"tool_call_id": getattr(tool_call, "id", None), "error": str(e)}
+                )
+
+        return results
 
     @abstractmethod
     def _get_specialized_instructions(self) -> str:
@@ -292,6 +445,7 @@ Your core responsibilities:
         """
         pass
 
+
 class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
     """
     Base class for all swarm implementations.
@@ -305,7 +459,7 @@ class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
         system: Optional[Any] = None,
         llm_provider: str = "openai",
         llm_model: str = "gpt-4",
-        **kwargs
+        **kwargs,
     ):
         if not MAS_AVAILABLE:
             raise ImportError("MultiAgenticSwarm is required but not available")
@@ -317,11 +471,7 @@ class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
         self.logger = mas.get_logger(f"agentswarm.{name}")
 
         # Initialize MAS System
-        super().__init__(
-            config_path=None,
-            enable_logging=True,
-            verbose=True
-        )
+        super().__init__(config_path=None, enable_logging=True, verbose=True)
 
         # Setup domain-specific components
         self._setup_tools()
@@ -348,9 +498,7 @@ class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
         self.register_agent(agent)
 
     async def execute_workflow(
-        self,
-        workflow_name: str,
-        context: Optional[Dict[str, Any]] = None
+        self, workflow_name: str, context: Optional[Dict[str, Any]] = None
     ) -> ExecutionResult:
         """Execute a workflow using MAS Task system"""
         # Execute the task using the MAS system
@@ -358,12 +506,12 @@ class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
 
         # Convert the result to ExecutionResult format
         return ExecutionResult(
-            success=task_result.get('success', False),
+            success=task_result.get("success", False),
             agent_name="FlutterSwarm",
             task_id=workflow_name,
             output=task_result,
-            execution_time=task_result.get('execution_time', 0),
-            metadata=context or {}
+            execution_time=task_result.get("execution_time", 0),
+            metadata=context or {},
         )
 
     def get_execution_history(self) -> List[ExecutionResult]:

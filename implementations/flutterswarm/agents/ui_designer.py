@@ -3,15 +3,19 @@ FlutterUIDesignerAgent - ALL UI design knowledge comes from LLM.
 No hardcoded UI patterns or design decisions.
 """
 
-from typing import Dict, Any, List, Optional
+import json
 import logging
-
-from implementations.agentswarm.agents import AbstractDeveloperAgent  # UI Designer extends Developer
-from implementations.agentswarm.core.types import TaskContext, ExecutionResult
-from ..tools import FlutterCLITool, DartCLITool, FileSystemTool
+from typing import Any, Dict, List, Optional
 
 # Import MAS as the core SDK
 import multiagenticswarm as mas
+from implementations.agentswarm.agents import (  # UI Designer extends Developer
+    AbstractDeveloperAgent,
+)
+from implementations.agentswarm.core.types import ExecutionResult, TaskContext
+
+from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
+
 
 class FlutterUIDesignerAgent(AbstractDeveloperAgent):
     """
@@ -28,21 +32,43 @@ class FlutterUIDesignerAgent(AbstractDeveloperAgent):
     - Theming and styling
     """
 
-    def __init__(self, name: str = "flutter_ui_designer", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
+    def __init__(
+        self,
+        name: str = "flutter_ui_designer",
+        working_directory: str = ".",
+        flutter_cli=None,
+        dart_cli=None,
+        file_system=None,
+        **kwargs,
+    ):
         self.working_directory = working_directory
 
         # Use shared tool instances if provided
-        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
-        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
-        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
+        self.flutter_cli = (
+            flutter_cli
+            if flutter_cli is not None
+            else FlutterCLITool(working_directory)
+        )
+        self.dart_cli = (
+            dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        )
+        self.file_system = (
+            file_system
+            if file_system is not None
+            else FileSystemTool(working_directory)
+        )
 
         # Initialize with proper MAS integration
         super().__init__(
             name=name,
-            system=kwargs.get('system'),
-            llm_provider=kwargs.get('llm_provider', 'openai'),
-            llm_model=kwargs.get('llm_model', 'gpt-4'),
-            **{k: v for k, v in kwargs.items() if k not in ['system', 'llm_provider', 'llm_model']}
+            system=kwargs.get("system"),
+            llm_provider=kwargs.get("llm_provider", "openai"),
+            llm_model=kwargs.get("llm_model", "gpt-4"),
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k not in ["system", "llm_provider", "llm_model"]
+            },
         )
 
         self.logger = mas.get_logger(f"flutterswarm.{name}")
@@ -134,35 +160,127 @@ When designing Flutter UIs:
 
 You have access to Flutter CLI, Dart CLI, and file system tools.
 Use these to implement your UI designs.
+
+MANDATORY TOOL USAGE:
+- You MUST use the file_system tool to create all files and directories
+- Use file_system with operation='mkdir' to create directories
+- Use file_system with operation='write' to create files with complete content
+- DO NOT just show code examples - ACTUALLY CREATE the files using tools
+- Every code block you generate must be written to a file using the file_system tool
+- Always create parent directories before creating files in them
+- Include the COMPLETE file content, not just snippets
+
+REQUIRED ACTIONS FOR EVERY TASK:
+1. Create all necessary directories using file_system tool
+2. Write all code to files using file_system tool
+3. List all created files at the end of your response
+4. Confirm files were actually written by checking the tool results
+
+Example tool usage:
+- Create directory: file_system(operation='mkdir', path='/full/path/to/directory')
+- Create file: file_system(operation='write', path='/full/path/to/file.dart', content='complete file content')
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:
-        """Get tools for this agent"""
+        """Get tools for this agent - properly formatted for function calling"""
         return [
             {
-                "name": "flutter_cli",
+                "type": "function",
+                "function": {
+                    "name": "flutter_cli",
+                    "description": "Execute Flutter CLI commands",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The Flutter command to execute",
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Command arguments",
+                            },
+                        },
+                        "required": ["command"],
+                    },
+                },
                 "func": self.flutter_cli.execute,
-                "description": "Execute Flutter CLI commands",
-                "scope": "local"
+                "scope": "local",
             },
             {
-                "name": "dart_cli",
+                "type": "function",
+                "function": {
+                    "name": "dart_cli",
+                    "description": "Execute Dart CLI commands",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The Dart command to execute",
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Command arguments",
+                            },
+                        },
+                        "required": ["command"],
+                    },
+                },
                 "func": self.dart_cli.execute,
-                "description": "Execute Dart CLI commands",
-                "scope": "local"
+                "scope": "local",
             },
             {
-                "name": "file_system",
+                "type": "function",
+                "function": {
+                    "name": "file_system",
+                    "description": "Create, read, write, and manage files and directories. MUST be used to create all files and directories.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": [
+                                    "read",
+                                    "write",
+                                    "list",
+                                    "mkdir",
+                                    "exists",
+                                    "delete",
+                                    "copy",
+                                    "move",
+                                ],
+                                "description": "The file system operation to perform",
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "The path to the file or directory",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The content to write to the file (for write operations)",
+                            },
+                            "encoding": {
+                                "type": "string",
+                                "description": "File encoding (default: utf-8)",
+                            },
+                            "create_dirs": {
+                                "type": "boolean",
+                                "description": "Whether to create parent directories (default: true)",
+                            },
+                        },
+                        "required": ["operation", "path"],
+                    },
+                },
                 "func": self.file_system.execute,
-                "description": "Execute file system operations (read, write, list, mkdir, etc.)",
-                "scope": "local"
-            }
+                "scope": "local",
+            },
         ]
 
     async def generate_code(
-        self,
-        requirements: str,
-        context: Optional[TaskContext] = None
+        self, requirements: str, context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Generate UI code based on requirements"""
         task = f"""
@@ -189,9 +307,7 @@ Use these to implement your UI designs.
         return await self.execute(task, context)
 
     async def implement_feature(
-        self,
-        feature_description: str,
-        project_context: Optional[TaskContext] = None
+        self, feature_description: str, project_context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Implement UI feature using LLM reasoning"""
         task = f"""
@@ -222,7 +338,7 @@ Use these to implement your UI designs.
         self,
         code_path: str,
         refactoring_goals: List[str],
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Refactor UI code using LLM analysis"""
         task = f"""
@@ -253,7 +369,7 @@ Use these to implement your UI designs.
         self,
         issue_description: str,
         error_logs: Optional[List[str]] = None,
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Debug UI issues using LLM analysis"""
         task = f"""
@@ -281,9 +397,7 @@ Use these to implement your UI designs.
         return await self.execute(task, context)
 
     async def optimize_performance(
-        self,
-        performance_targets: Dict[str, Any],
-        context: Optional[TaskContext] = None
+        self, performance_targets: Dict[str, Any], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Optimize UI performance using LLM analysis"""
         task = f"""
@@ -309,14 +423,15 @@ Use these to implement your UI designs.
 
         return await self.execute(task, context)
 
-    async def design_ui(
-        self,
-        context: Optional[TaskContext] = None
-    ) -> ExecutionResult:
+    async def design_ui(self, context: Optional[TaskContext] = None) -> ExecutionResult:
         """Design UI using LLM analysis"""
         # Extract UI requirements and design constraints from context
-        ui_requirements = getattr(context, 'metadata', {}).get('app_description', 'Flutter app UI')
-        design_constraints = getattr(context, 'metadata', {}).get('design_requirements', {})
+        ui_requirements = getattr(context, "metadata", {}).get(
+            "app_description", "Flutter app UI"
+        )
+        design_constraints = getattr(context, "metadata", {}).get(
+            "design_requirements", {}
+        )
 
         task = f"""
         Design Flutter UI for: {ui_requirements}
@@ -343,9 +458,7 @@ Use these to implement your UI designs.
         return await self.execute(task, context)
 
     async def create_theme(
-        self,
-        brand_guidelines: Dict[str, Any],
-        context: Optional[TaskContext] = None
+        self, brand_guidelines: Dict[str, Any], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Create theme based on brand guidelines"""
         task = f"""
@@ -371,9 +484,7 @@ Use these to implement your UI designs.
         return await self.execute(task, context)
 
     async def create_animations(
-        self,
-        animation_requirements: List[str],
-        context: Optional[TaskContext] = None
+        self, animation_requirements: List[str], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Create animations based on requirements"""
         task = f"""
@@ -399,9 +510,7 @@ Use these to implement your UI designs.
         return await self.execute(task, context)
 
     async def optimize_ui_performance(
-        self,
-        performance_issues: List[str],
-        context: Optional[TaskContext] = None
+        self, performance_issues: List[str], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Optimize UI performance for specific issues"""
         task = f"""
@@ -433,7 +542,9 @@ Use these to implement your UI designs.
         # For now, return empty list
         return []
 
-    def _extract_theme_updates_from_response(self, response: str) -> List[Dict[str, str]]:
+    def _extract_theme_updates_from_response(
+        self, response: str
+    ) -> List[Dict[str, str]]:
         """Extract theme updates from LLM response"""
         # This would parse the LLM response to extract theme updates
         # For now, return empty list

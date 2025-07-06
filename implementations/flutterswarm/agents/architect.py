@@ -3,15 +3,17 @@ FlutterArchitectAgent - ALL architectural knowledge comes from LLM.
 No hardcoded architectural patterns or decisions.
 """
 
-from typing import Dict, Any, List, Optional
+import json
 import logging
-
-from implementations.agentswarm.agents import AbstractArchitectAgent
-from implementations.agentswarm.core.types import TaskContext, ExecutionResult
-from ..tools import FlutterCLITool, DartCLITool, FileSystemTool
+from typing import Any, Dict, List, Optional
 
 # Import MAS as the core SDK
 import multiagenticswarm as mas
+from implementations.agentswarm.agents import AbstractArchitectAgent
+from implementations.agentswarm.core.types import ExecutionResult, TaskContext
+
+from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
+
 
 class FlutterArchitectAgent(AbstractArchitectAgent):
     """
@@ -19,21 +21,43 @@ class FlutterArchitectAgent(AbstractArchitectAgent):
     No hardcoded architectural patterns - all knowledge comes from LLM.
     """
 
-    def __init__(self, name: str = "flutter_architect", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
+    def __init__(
+        self,
+        name: str = "flutter_architect",
+        working_directory: str = ".",
+        flutter_cli=None,
+        dart_cli=None,
+        file_system=None,
+        **kwargs,
+    ):
         self.working_directory = working_directory
 
         # Use shared tool instances if provided
-        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
-        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
-        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
+        self.flutter_cli = (
+            flutter_cli
+            if flutter_cli is not None
+            else FlutterCLITool(working_directory)
+        )
+        self.dart_cli = (
+            dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        )
+        self.file_system = (
+            file_system
+            if file_system is not None
+            else FileSystemTool(working_directory)
+        )
 
         # Initialize with proper MAS integration
         super().__init__(
             name=name,
-            system=kwargs.get('system'),
-            llm_provider=kwargs.get('llm_provider', 'openai'),
-            llm_model=kwargs.get('llm_model', 'gpt-4'),
-            **{k: v for k, v in kwargs.items() if k not in ['system', 'llm_provider', 'llm_model']}
+            system=kwargs.get("system"),
+            llm_provider=kwargs.get("llm_provider", "openai"),
+            llm_model=kwargs.get("llm_model", "gpt-4"),
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k not in ["system", "llm_provider", "llm_model"]
+            },
         )
 
         self.logger = mas.get_logger(f"flutterswarm.{name}")
@@ -146,36 +170,130 @@ When designing architecture:
 
 You have access to Flutter CLI, Dart CLI, and file system tools.
 Use these to implement your architectural designs.
+
+MANDATORY TOOL USAGE:
+- You MUST use the file_system tool to create all files and directories
+- Use file_system with operation='mkdir' to create directories
+- Use file_system with operation='write' to create files with complete content
+- DO NOT just show code examples - ACTUALLY CREATE the files using tools
+- Every code block you generate must be written to a file using the file_system tool
+- Always create parent directories before creating files in them
+- Include the COMPLETE file content, not just snippets
+
+REQUIRED ACTIONS FOR EVERY TASK:
+1. Create all necessary directories using file_system tool
+2. Write all code to files using file_system tool
+3. List all created files at the end of your response
+4. Confirm files were actually written by checking the tool results
+
+Example tool usage:
+- Create directory: file_system(operation='mkdir', path='/full/path/to/directory')
+- Create file: file_system(operation='write', path='/full/path/to/file.dart', content='complete file content')
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:
-        """Get tools for this agent"""
+        """Get tools for this agent - properly formatted for function calling"""
         return [
             {
-                "name": "flutter_cli",
+                "type": "function",
+                "function": {
+                    "name": "flutter_cli",
+                    "description": "Execute Flutter CLI commands",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The Flutter command to execute",
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Command arguments",
+                            },
+                        },
+                        "required": ["command"],
+                    },
+                },
                 "func": self.flutter_cli.execute,
-                "description": "Execute Flutter CLI commands",
-                "scope": "local"
+                "scope": "local",
             },
             {
-                "name": "dart_cli",
+                "type": "function",
+                "function": {
+                    "name": "dart_cli",
+                    "description": "Execute Dart CLI commands",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The Dart command to execute",
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Command arguments",
+                            },
+                        },
+                        "required": ["command"],
+                    },
+                },
                 "func": self.dart_cli.execute,
-                "description": "Execute Dart CLI commands",
-                "scope": "local"
+                "scope": "local",
             },
             {
-                "name": "file_system",
+                "type": "function",
+                "function": {
+                    "name": "file_system",
+                    "description": "Create, read, write, and manage files and directories. MUST be used to create all files and directories.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": [
+                                    "read",
+                                    "write",
+                                    "list",
+                                    "mkdir",
+                                    "exists",
+                                    "delete",
+                                    "copy",
+                                    "move",
+                                ],
+                                "description": "The file system operation to perform",
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "The path to the file or directory",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The content to write to the file (for write operations)",
+                            },
+                            "encoding": {
+                                "type": "string",
+                                "description": "File encoding (default: utf-8)",
+                            },
+                            "create_dirs": {
+                                "type": "boolean",
+                                "description": "Whether to create parent directories (default: true)",
+                            },
+                        },
+                        "required": ["operation", "path"],
+                    },
+                },
                 "func": self.file_system.execute,
-                "description": "Execute file system operations (read, write, list, mkdir, etc.)",
-                "scope": "local"
-            }
+                "scope": "local",
+            },
         ]
 
     async def analyze_requirements(
         self,
         requirements: str,
         constraints: List[str],
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Analyze requirements and identify architectural needs"""
         task = f"""
@@ -205,7 +323,7 @@ Use these to implement your architectural designs.
     async def design_architecture(
         self,
         requirements_analysis: Dict[str, Any],
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Design system architecture using LLM analysis"""
         task = f"""
@@ -236,7 +354,7 @@ Use these to implement your architectural designs.
         self,
         requirements: Dict[str, Any],
         constraints: List[str],
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Choose appropriate technology stack"""
         task = f"""
@@ -265,9 +383,7 @@ Use these to implement your architectural designs.
         return await self.execute(task, context)
 
     async def define_interfaces(
-        self,
-        architecture: Dict[str, Any],
-        context: Optional[TaskContext] = None
+        self, architecture: Dict[str, Any], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Define component interfaces and APIs"""
         task = f"""
@@ -295,9 +411,7 @@ Use these to implement your architectural designs.
         return await self.execute(task, context)
 
     async def create_technical_specification(
-        self,
-        architecture: Dict[str, Any],
-        context: Optional[TaskContext] = None
+        self, architecture: Dict[str, Any], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Create detailed technical specification"""
         task = f"""
@@ -329,7 +443,7 @@ Use these to implement your architectural designs.
         self,
         architecture: Dict[str, Any],
         review_criteria: List[str],
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Review and validate architecture"""
         task = f"""
@@ -373,41 +487,44 @@ Use these to implement your architectural designs.
                 f"Analyze Flutter version: {flutter_version.get('output')} and doctor: {doctor_status.get('output')}. "
                 "What issues exist and what should be fixed?"
             )
-            return ExecutionResult(success=True, result={
-                "flutter_version": flutter_version.get('output'),
-                "doctor_status": doctor_status.get('output'),
-                "analysis": analysis
-            })
+            return ExecutionResult(
+                success=True,
+                result={
+                    "flutter_version": flutter_version.get("output"),
+                    "doctor_status": doctor_status.get("output"),
+                    "analysis": analysis,
+                },
+            )
         except Exception as e:
             self.logger.error(f"Flutter environment verification failed: {e}")
             return ExecutionResult(success=False, error=str(e))
 
     # Helper methods
-    def _extract_architecture_files_from_response(self, response: str) -> List[Dict[str, str]]:
+    def _extract_architecture_files_from_response(
+        self, response: str
+    ) -> List[Dict[str, str]]:
         """Extract architecture files from LLM response"""
         files = []
 
-        lines = response.split('\n')
+        lines = response.split("\n")
         current_file = None
         current_content = []
 
         for line in lines:
-            if line.strip().startswith('ARCH_FILE:') or line.strip().startswith('doc/'):
+            if line.strip().startswith("ARCH_FILE:") or line.strip().startswith("doc/"):
                 if current_file:
-                    files.append({
-                        'path': current_file,
-                        'content': '\n'.join(current_content)
-                    })
+                    files.append(
+                        {"path": current_file, "content": "\n".join(current_content)}
+                    )
 
-                current_file = line.split(':', 1)[1].strip() if ':' in line else line.strip()
+                current_file = (
+                    line.split(":", 1)[1].strip() if ":" in line else line.strip()
+                )
                 current_content = []
             elif current_file and line.strip():
                 current_content.append(line)
 
         if current_file:
-            files.append({
-                'path': current_file,
-                'content': '\n'.join(current_content)
-            })
+            files.append({"path": current_file, "content": "\n".join(current_content)})
 
         return files

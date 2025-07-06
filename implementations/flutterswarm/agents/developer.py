@@ -3,18 +3,23 @@ FlutterDeveloperAgent - ALL Flutter knowledge comes from LLM.
 No hardcoded Flutter patterns, widgets, or logic.
 """
 
+import json
 import logging
-from typing import Dict, Any, List, Optional
-
-# Import from implementations
-from implementations.agentswarm.agents import AbstractDeveloperAgent
-from implementations.agentswarm.core.types import TaskContext, ExecutionResult, AgentRole
-
-# Import tools
-from ..tools import FlutterCLITool, DartCLITool, FileSystemTool
+from typing import Any, Dict, List, Optional
 
 # Import MAS as the core SDK
 import multiagenticswarm as mas
+
+# Import from implementations
+from implementations.agentswarm.agents import AbstractDeveloperAgent
+from implementations.agentswarm.core.types import (
+    AgentRole,
+    ExecutionResult,
+    TaskContext,
+)
+
+# Import tools
+from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
 
 
 class FlutterDeveloperAgent(AbstractDeveloperAgent):
@@ -30,21 +35,43 @@ class FlutterDeveloperAgent(AbstractDeveloperAgent):
     - Performance optimizations
     """
 
-    def __init__(self, name: str = "flutter_developer", working_directory: str = ".", flutter_cli=None, dart_cli=None, file_system=None, **kwargs):
+    def __init__(
+        self,
+        name: str = "flutter_developer",
+        working_directory: str = ".",
+        flutter_cli=None,
+        dart_cli=None,
+        file_system=None,
+        **kwargs,
+    ):
         self.working_directory = working_directory
 
         # Use shared tool instances if provided
-        self.flutter_cli = flutter_cli if flutter_cli is not None else FlutterCLITool(working_directory)
-        self.dart_cli = dart_cli if dart_cli is not None else DartCLITool(working_directory)
-        self.file_system = file_system if file_system is not None else FileSystemTool(working_directory)
+        self.flutter_cli = (
+            flutter_cli
+            if flutter_cli is not None
+            else FlutterCLITool(working_directory)
+        )
+        self.dart_cli = (
+            dart_cli if dart_cli is not None else DartCLITool(working_directory)
+        )
+        self.file_system = (
+            file_system
+            if file_system is not None
+            else FileSystemTool(working_directory)
+        )
 
         # Initialize with proper MAS integration
         super().__init__(
             name=name,
-            system=kwargs.get('system'),
-            llm_provider=kwargs.get('llm_provider', 'openai'),
-            llm_model=kwargs.get('llm_model', 'gpt-4'),
-            **{k: v for k, v in kwargs.items() if k not in ['system', 'llm_provider', 'llm_model']}
+            system=kwargs.get("system"),
+            llm_provider=kwargs.get("llm_provider", "openai"),
+            llm_model=kwargs.get("llm_model", "gpt-4"),
+            **{
+                k: v
+                for k, v in kwargs.items()
+                if k not in ["system", "llm_provider", "llm_model"]
+            },
         )
 
         self.logger = mas.get_logger(f"flutterswarm.{name}")
@@ -141,66 +168,127 @@ When generating Flutter code:
 
 You have access to CLI tools for Flutter/Dart commands and file operations.
 Use these tools to execute the plans you create.
+
+MANDATORY TOOL USAGE:
+- You MUST use the file_system tool to create all files and directories
+- Use file_system with operation='mkdir' to create directories
+- Use file_system with operation='write' to create files with complete content
+- DO NOT just show code examples - ACTUALLY CREATE the files using tools
+- Every code block you generate must be written to a file using the file_system tool
+- Always create parent directories before creating files in them
+- Include the COMPLETE file content, not just snippets
+
+REQUIRED ACTIONS FOR EVERY TASK:
+1. Create all necessary directories using file_system tool
+2. Write all code to files using file_system tool
+3. List all created files at the end of your response
+4. Confirm files were actually written by checking the tool results
+
+Example tool usage:
+- Create directory: file_system(operation='mkdir', path='/full/path/to/directory')
+- Create file: file_system(operation='write', path='/full/path/to/file.dart', content='complete file content')
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:
-        """Get tools for this agent"""
+        """Get tools for this agent - properly formatted for function calling"""
         return [
             {
-                "name": "flutter_cli",
-                "func": self.flutter_cli.execute,
-                "description": "Execute Flutter CLI commands",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "command": {"type": "string", "description": "The Flutter command to execute"},
-                        "args": {"type": "array", "items": {"type": "string"}, "description": "Command arguments"}
-                    },
-                    "required": ["command"]
-                },
-                "scope": "local"
-            },
-            {
-                "name": "dart_cli",
-                "func": self.dart_cli.execute,
-                "description": "Execute Dart CLI commands",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "command": {"type": "string", "description": "The Dart command to execute"},
-                        "args": {"type": "array", "items": {"type": "string"}, "description": "Command arguments"}
-                    },
-                    "required": ["command"]
-                },
-                "scope": "local"
-            },
-            {
-                "name": "file_system",
-                "func": self.file_system.execute,
-                "description": "Execute file system operations (read, write, list, mkdir, etc.)",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "operation": {
-                            "type": "string",
-                            "description": "The file system operation to perform",
-                            "enum": ["read", "write", "list", "mkdir", "exists", "delete", "copy", "move"]
+                "type": "function",
+                "function": {
+                    "name": "flutter_cli",
+                    "description": "Execute Flutter CLI commands",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The Flutter command to execute",
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Command arguments",
+                            },
                         },
-                        "path": {"type": "string", "description": "The path to the file or directory"},
-                        "content": {"type": "string", "description": "The content to write to the file (for write operations)"},
-                        "encoding": {"type": "string", "description": "File encoding (default: utf-8)"},
-                        "create_dirs": {"type": "boolean", "description": "Whether to create parent directories (default: true)"}
+                        "required": ["command"],
                     },
-                    "required": ["operation", "path"]
                 },
-                "scope": "local"
-            }
+                "func": self.flutter_cli.execute,
+                "scope": "local",
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "dart_cli",
+                    "description": "Execute Dart CLI commands",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The Dart command to execute",
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Command arguments",
+                            },
+                        },
+                        "required": ["command"],
+                    },
+                },
+                "func": self.dart_cli.execute,
+                "scope": "local",
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "file_system",
+                    "description": "Create, read, write, and manage files and directories. MUST be used to create all files and directories.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": [
+                                    "read",
+                                    "write",
+                                    "list",
+                                    "mkdir",
+                                    "exists",
+                                    "delete",
+                                    "copy",
+                                    "move",
+                                ],
+                                "description": "The file system operation to perform",
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "The path to the file or directory",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "The content to write to the file (for write operations)",
+                            },
+                            "encoding": {
+                                "type": "string",
+                                "description": "File encoding (default: utf-8)",
+                            },
+                            "create_dirs": {
+                                "type": "boolean",
+                                "description": "Whether to create parent directories (default: true)",
+                            },
+                        },
+                        "required": ["operation", "path"],
+                    },
+                },
+                "func": self.file_system.execute,
+                "scope": "local",
+            },
         ]
 
     async def generate_code(
-        self,
-        requirements: str,
-        context: Optional[TaskContext] = None
+        self, requirements: str, context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Generate code based on requirements"""
         task = f"""
@@ -226,20 +314,38 @@ Use these tools to execute the plans you create.
         return await self.execute(task, context)
 
     async def implement_feature(
-        self,
-        feature_description: str,
-        project_context: Optional[TaskContext] = None
+        self, feature_description: str, project_context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Implement a complete feature using LLM reasoning"""
-        task = f"""
+        # Create a specific prompt that forces file creation
+        implementation_prompt = f"""
         Implement Flutter feature: {feature_description}
 
         Project context: {project_context.__dict__ if project_context else 'None'}
 
+        You MUST perform the following actions using the file_system tool:
+
+        1. Create the project structure:
+           - Use file_system with operation='mkdir' for each directory
+           - Create directories before creating files in them
+
+        2. Implement the feature by creating actual files:
+           - For EACH code file you want to create:
+             a. First ensure the parent directory exists
+             b. Use file_system with operation='write' to create the file
+             c. Include the COMPLETE file content, not just snippets
+
+        3. Your response should include:
+           - A list of all directories created
+           - A list of all files created with their paths
+           - Confirmation that files were actually written
+
+        DO NOT just show code blocks. You MUST use the file_system tool to create actual files.
+
         Steps:
         1. Analyze the feature requirements
         2. Design the implementation approach
-        3. Create necessary files and directories
+        3. Create necessary files and directories using file_system tool
         4. Implement the feature with proper architecture
         5. Add error handling and edge cases
         6. Include unit and widget tests
@@ -253,13 +359,13 @@ Use these tools to execute the plans you create.
         - Optimize for performance
         """
 
-        return await self.execute(task, project_context)
+        return await self.execute(implementation_prompt, project_context)
 
     async def refactor_code(
         self,
         code_path: str,
         refactoring_goals: List[str],
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Refactor code using LLM analysis and decisions"""
         task = f"""
@@ -289,7 +395,7 @@ Use these tools to execute the plans you create.
         self,
         issue_description: str,
         error_logs: Optional[List[str]] = None,
-        context: Optional[TaskContext] = None
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Debug and fix issues using LLM analysis"""
         task = f"""
@@ -317,9 +423,7 @@ Use these tools to execute the plans you create.
         return await self.execute(task, context)
 
     async def optimize_performance(
-        self,
-        performance_targets: Dict[str, Any],
-        context: Optional[TaskContext] = None
+        self, performance_targets: Dict[str, Any], context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Optimize code performance using LLM analysis"""
         task = f"""
@@ -357,57 +461,106 @@ Use these tools to execute the plans you create.
         try:
             # Check if we're already in a Flutter project
             import os
+
             pubspec_path = os.path.join(context.project_path, "pubspec.yaml")
             if os.path.exists(pubspec_path):
-                self.logger.info("Flutter project already exists, skipping flutter create")
+                self.logger.info(
+                    "Flutter project already exists, skipping flutter create"
+                )
                 create_result = {"success": True, "message": "Project already exists"}
             else:
                 # Validate project name
-                project_name = getattr(context, 'project_name', None) or getattr(context, 'app_name', None) or "my_flutter_app"
-                platforms = getattr(context, 'platforms', None) or ["ios", "android"]
+                project_name = (
+                    getattr(context, "project_name", None)
+                    or getattr(context, "app_name", None)
+                    or "my_flutter_app"
+                )
+                platforms = getattr(context, "platforms", None) or ["ios", "android"]
                 # Call flutter_cli.create_project to bootstrap the project
                 create_result = await self.flutter_cli.create_project(
-                    project_name=project_name,
-                    platforms=platforms
+                    project_name=project_name, platforms=platforms
                 )
                 if not create_result.get("success", False):
-                    self.logger.error(f"flutter create failed: {create_result.get('error')}")
-                    return ExecutionResult(success=False, error_message=create_result.get("error"), agent_name=self.name, task_id="setup_project_structure")
+                    self.logger.error(
+                        f"flutter create failed: {create_result.get('error')}"
+                    )
+                    return ExecutionResult(
+                        success=False,
+                        error_message=create_result.get("error"),
+                        agent_name=self.name,
+                        task_id="setup_project_structure",
+                    )
             # LLM decides what directories are needed (optional, after flutter create)
-            structure_response = await self.llm_provider.execute([
-                {"role": "user", "content": f"What additional directory structure is needed for a Flutter project with requirements: {getattr(context, 'requirements', '')}? Respond with a JSON object containing a 'directories' array."}
-            ])
+            structure_response = await self.llm_provider.execute(
+                [
+                    {
+                        "role": "user",
+                        "content": f"What additional directory structure is needed for a Flutter project with requirements: {getattr(context, 'requirements', '')}? Respond with a JSON object containing a 'directories' array.",
+                    }
+                ]
+            )
             # Parse the response to get directory structure
             structure_plan = {"directories": []}  # Default fallback
             try:
                 import json
+
                 structure_plan = json.loads(structure_response.content)
             except:
                 # If parsing fails, use default
                 structure_plan = {"directories": []}
 
-            for directory in structure_plan.get('directories', []):
+            for directory in structure_plan.get("directories", []):
                 await self.file_system.create_directory(directory)
-            return ExecutionResult(success=True, agent_name=self.name, task_id="setup_project_structure", output={"structure_plan": structure_plan, "flutter_create": create_result})
+            return ExecutionResult(
+                success=True,
+                agent_name=self.name,
+                task_id="setup_project_structure",
+                output={
+                    "structure_plan": structure_plan,
+                    "flutter_create": create_result,
+                },
+            )
         except Exception as e:
             self.logger.error(f"Project structure setup failed: {e}")
-            return ExecutionResult(success=False, error_message=str(e), agent_name=self.name, task_id="setup_project_structure")
+            return ExecutionResult(
+                success=False,
+                error_message=str(e),
+                agent_name=self.name,
+                task_id="setup_project_structure",
+            )
 
-    async def validate_dependencies(self, dependencies: List[str], context: TaskContext) -> ExecutionResult:
+    async def validate_dependencies(
+        self, dependencies: List[str], context: TaskContext
+    ) -> ExecutionResult:
         """Agent validates Flutter dependencies using LLM knowledge and Dart CLI."""
         self.logger.info(f"Validating dependencies: {dependencies}")
         try:
-            validation_response = await self.llm_provider.execute([
-                {"role": "user", "content": f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed?"}
-            ])
+            validation_response = await self.llm_provider.execute(
+                [
+                    {
+                        "role": "user",
+                        "content": f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed?",
+                    }
+                ]
+            )
             results = {}
             for dependency in dependencies:
                 pub_info = await self.dart_cli.execute("pub", ["deps", dependency])
-                compatibility_response = await self.llm_provider.execute([
-                    {"role": "user", "content": f"Is {dependency} compatible? pub info: {pub_info.get('output')}"}
-                ])
+                compatibility_response = await self.llm_provider.execute(
+                    [
+                        {
+                            "role": "user",
+                            "content": f"Is {dependency} compatible? pub info: {pub_info.get('output')}",
+                        }
+                    ]
+                )
                 results[dependency] = compatibility_response.content
             return ExecutionResult(success=True, result=results)
         except Exception as e:
             self.logger.error(f"Dependency validation failed: {e}")
-            return ExecutionResult(success=False, error_message=str(e), agent_name=self.name, task_id="validate_dependencies")
+            return ExecutionResult(
+                success=False,
+                error_message=str(e),
+                agent_name=self.name,
+                task_id="validate_dependencies",
+            )

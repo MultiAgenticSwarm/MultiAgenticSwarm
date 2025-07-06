@@ -4,12 +4,13 @@ Basic Music App Creator using FlutterSwarm
 This is a test script to verify FlutterSwarm functionality.
 """
 
-import os
 import asyncio
+import os
 import sys
 from pathlib import Path
 
 import dotenv
+
 # Load environment variables from .env file
 dotenv.load_dotenv()
 # Ensure the script is run from the project root
@@ -19,6 +20,7 @@ sys.path.insert(0, str(project_root))
 
 try:
     from implementations.flutterswarm import FlutterSwarm
+
     print("✓ FlutterSwarm imported successfully")
 except ImportError as e:
     print(f"✗ Failed to import FlutterSwarm: {e}")
@@ -45,7 +47,7 @@ async def create_basic_music_app():
             project_path=project_path,
             llm_provider="anthropic",  # Change to your preferred provider
             llm_model="claude-3-5-sonnet-20241022",  # Use a suitable model
-            temperature=0.7
+            temperature=0.7,
         )
         print("✓ FlutterSwarm initialized successfully")
     except Exception as e:
@@ -84,14 +86,14 @@ async def create_basic_music_app():
         "progress_bar_ui",
         "volume_slider",
         "skip_buttons",
-        "minimalist_design"
+        "minimalist_design",
     ]
 
     design_requirements = {
         "style": "Material Design",
         "theme": "dark",
         "responsive": True,
-        "minimalist": True
+        "minimalist": True,
     }
 
     # Create the app
@@ -102,7 +104,7 @@ async def create_basic_music_app():
             features=features,
             platforms=["android", "ios"],
             design_requirements=design_requirements,
-            performance_requirements={"startup_time": "fast", "memory_usage": "low"}
+            performance_requirements={"startup_time": "fast", "memory_usage": "low"},
         )
 
         if result.success:
@@ -110,7 +112,7 @@ async def create_basic_music_app():
             print(f"Output: {result.output}")
             return True
         else:
-            print(f"✗ App creation failed: {result.error}")
+            print(f"✗ App creation failed: {result.error_message}")
             return False
 
     except Exception as e:
@@ -128,6 +130,7 @@ async def test_flutterswarm_basic():
     # Check if we can import the required modules
     try:
         import multiagenticswarm as mas
+
         print("✓ MultiAgenticSwarm SDK available")
     except ImportError as e:
         print(f"✗ MultiAgenticSwarm SDK not available: {e}")
@@ -135,7 +138,8 @@ async def test_flutterswarm_basic():
 
     # Test environment variables
     import os
-    llm_key = os.getenv('OPENAI_API_KEY') or os.getenv('ANTHROPIC_API_KEY')
+
+    llm_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
     if not llm_key:
         print("⚠️  Warning: No LLM API key found in environment variables")
         print("   Set OPENAI_API_KEY or ANTHROPIC_API_KEY for full functionality")
