@@ -209,10 +209,41 @@ class MyApp extends StatelessWidget {
 ''')
 ```
 
+CRITICAL FILE COMPLETION REQUIREMENTS:
+- NEVER truncate code - ALWAYS provide COMPLETE file content from start to finish
+- If you run out of space in your response, create multiple Python code blocks
+- Each file MUST compile successfully - test your code mentally before writing
+- NEVER leave incomplete methods, classes, or statements
+- ALWAYS close all brackets, braces, and quotes properly
+- Include ALL necessary imports at the top of each file
+
+RESPONSIVE UI REQUIREMENTS:
+- ALWAYS use SingleChildScrollView for scrollable content
+- Use MediaQuery.of(context).size for responsive sizing
+- Set constraints with BoxConstraints for minimum/maximum sizes
+- Consider different screen sizes and orientations
+- Use Flexible, Expanded, or Wrap widgets for responsive layouts
+
+DEPENDENCY MANAGEMENT:
+- ALWAYS update pubspec.yaml with required dependencies
+- Common dependencies to add: provider, cupertino_icons
+- Use file_system to update pubspec.yaml when adding packages
+
+COMPLETE IMPLEMENTATION CHECKLIST:
+1. Create ALL directories first
+2. Create pubspec.yaml with ALL dependencies
+3. Create main.dart with proper imports
+4. Create ALL imported files (screens, widgets, models, etc.)
+5. Ensure ALL imports resolve correctly
+6. Test that every file is complete and syntactically correct
+7. Verify responsive design principles are applied
+
 IMPORTANT: 
 - ALWAYS put file_system calls inside ```python code blocks
 - ALWAYS provide the COMPLETE file content, not snippets
 - ALWAYS create directories before creating files in them
+- NEVER leave any imports unresolved
+- ALWAYS ensure UI is responsive and scrollable
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:
@@ -349,40 +380,46 @@ IMPORTANT:
 
         Project context: {project_context.__dict__ if project_context else 'None'}
 
-        You MUST perform the following actions using the file_system tool:
+        MANDATORY FILE CREATION SEQUENCE:
 
-        1. Create the project structure:
+        1. FIRST - Update pubspec.yaml with ALL required dependencies:
+           - Check existing pubspec.yaml 
+           - Add any missing dependencies (provider, cupertino_icons, etc.)
+           - Use file_system to overwrite pubspec.yaml with complete content
+
+        2. SECOND - Create complete directory structure:
            - Use file_system with operation='mkdir' for each directory
-           - Create directories before creating files in them
+           - Create ALL directories the app will need
 
-        2. Implement the feature by creating actual files:
-           - For EACH code file you want to create:
-             a. First ensure the parent directory exists
-             b. Use file_system with operation='write' to create the file
-             c. Include the COMPLETE file content, not just snippets
+        3. THIRD - Create ALL Dart files in proper order:
+           - Domain models first (no dependencies)
+           - ViewModels/State management next
+           - Widgets and screens last
+           - Include COMPLETE file content from start to finish
+           - NEVER truncate or leave incomplete code
 
-        3. Your response should include:
-           - A list of all directories created
-           - A list of all files created with their paths
-           - Confirmation that files were actually written
+        4. FOURTH - Create working tests:
+           - Update existing widget_test.dart to test the actual app
+           - Create meaningful test cases
 
-        DO NOT just show code blocks. You MUST use the file_system tool to create actual files.
+        CRITICAL REQUIREMENTS:
+        - EVERY import statement MUST have a corresponding file created
+        - EVERY file MUST be syntactically complete and compilable
+        - UI MUST be responsive with SingleChildScrollView and proper constraints
+        - ALL Python code blocks MUST be properly closed with ```
+        - If you run out of space, continue in additional code blocks
 
-        Steps:
-        1. Analyze the feature requirements
-        2. Design the implementation approach
-        3. Create necessary files and directories using file_system tool
-        4. Implement the feature with proper architecture
-        5. Add error handling and edge cases
-        6. Include unit and widget tests
-        7. Update documentation
+        VALIDATION CHECKLIST (verify each):
+        ✓ pubspec.yaml updated with dependencies
+        ✓ All directories created
+        ✓ main.dart exists and imports work
+        ✓ All imported files exist
+        ✓ UI is responsive and scrollable
+        ✓ State management properly implemented
+        ✓ Tests updated and functional
+        ✓ No compilation errors
 
-        Follow Flutter conventions:
-        - Use appropriate state management
-        - Implement responsive design
-        - Add proper navigation
-        - Include accessibility features
-        - Optimize for performance
+        You MUST complete ALL files - do not leave anything incomplete!
         """
 
         return await self.execute(implementation_prompt, project_context)

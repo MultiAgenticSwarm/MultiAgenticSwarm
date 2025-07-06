@@ -201,10 +201,52 @@ class MyApp extends StatelessWidget {
 ''')
 ```
 
+CRITICAL FILE COMPLETION REQUIREMENTS:
+- NEVER truncate code - ALWAYS provide COMPLETE file content from start to finish
+- If you run out of space in your response, create multiple Python code blocks
+- Each file MUST compile successfully - test your code mentally before writing
+- NEVER leave incomplete methods, classes, or statements
+- ALWAYS close all brackets, braces, and quotes properly
+- Include ALL necessary imports at the top of each file
+
+RESPONSIVE UI REQUIREMENTS:
+- ALWAYS use SingleChildScrollView for scrollable content
+- Use MediaQuery.of(context).size for responsive sizing
+- Set constraints with BoxConstraints for minimum/maximum sizes
+- Consider different screen sizes and orientations
+- Use Flexible, Expanded, or Wrap widgets for responsive layouts
+- Design for mobile-first, then adapt for tablets and desktop
+- Use LayoutBuilder for conditional layouts based on available space
+- Implement proper breakpoints for different screen categories
+
+DEPENDENCY MANAGEMENT:
+- ALWAYS update pubspec.yaml with required dependencies
+- Common UI dependencies to add: provider, cupertino_icons, cached_network_image
+- Use file_system to update pubspec.yaml when adding packages
+- Include necessary asset declarations in pubspec.yaml
+- Consider platform-specific dependencies
+
+COMPLETE IMPLEMENTATION CHECKLIST:
+1. Create ALL directories first (lib/screens, lib/widgets, lib/themes, etc.)
+2. Create pubspec.yaml with ALL dependencies and assets
+3. Create main.dart with proper imports and theme configuration
+4. Create ALL imported files (screens, widgets, models, themes, etc.)
+5. Ensure ALL imports resolve correctly
+6. Test that every file is complete and syntactically correct
+7. Verify responsive design principles are applied
+8. Confirm accessibility features are implemented
+9. Validate theme consistency across all widgets
+10. Test animations and interactions work properly
+
 IMPORTANT: 
 - ALWAYS put file_system calls inside ```python code blocks
 - ALWAYS provide the COMPLETE file content, not snippets
 - ALWAYS create directories before creating files in them
+- NEVER leave any imports unresolved
+- ALWAYS ensure UI is responsive and scrollable
+- Create complete, production-ready widget files
+- Include proper error handling and loading states
+- Implement consistent theming and styling
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:

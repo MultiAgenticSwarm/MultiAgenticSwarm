@@ -926,6 +926,10 @@ class FlutterSwarm(BaseSwarm):
                     os.makedirs(dir_path, exist_ok=True)
                     self.logger.info(f"Created directory: {dir_path}")
 
+                # Special handling for pubspec.yaml - ensure it has required dependencies
+                if path.endswith("pubspec.yaml") and content:
+                    content = self._ensure_pubspec_dependencies(content)
+
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)
                 self.logger.info(f"File written: {path} ({len(content)} characters)")
@@ -972,6 +976,21 @@ class FlutterSwarm(BaseSwarm):
             self.logger.error(f"Direct file system operation failed: {str(e)}")
             self.logger.error(f"Operation: {operation}, Path: {path}")
             return {"success": False, "error": str(e), "path": path}
+
+    def _ensure_pubspec_dependencies(self, content: str) -> str:
+        """Ensure pubspec.yaml has required dependencies for Flutter apps."""
+        # Check if provider is already in the content
+        if "provider:" not in content and "dependencies:" in content:
+            # Add provider dependency if missing
+            import re
+
+            # Find the dependencies section and add provider
+            pattern = r"(dependencies:\s*\n(?:.*\n)*?)(\n\s*dev_dependencies:)"
+            replacement = r"\1  provider: ^6.1.1\n\2"
+            content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+            self.logger.info("Added provider dependency to pubspec.yaml")
+
+        return content
 
     async def _dispatch_action(
         self, agent_name: str, action: str, input_data: Any, context: Dict[str, Any]

@@ -211,10 +211,56 @@ class MyApp extends StatelessWidget {
 ''')
 ```
 
+CRITICAL FILE COMPLETION REQUIREMENTS:
+- NEVER truncate code - ALWAYS provide COMPLETE file content from start to finish
+- If you run out of space in your response, create multiple Python code blocks
+- Each file MUST compile successfully - test your code mentally before writing
+- NEVER leave incomplete methods, classes, or statements
+- ALWAYS close all brackets, braces, and quotes properly
+- Include ALL necessary imports at the top of each file
+
+PROJECT STRUCTURE REQUIREMENTS:
+- Create complete directory structure first: lib/, lib/screens/, lib/widgets/, lib/models/, lib/services/, lib/utils/, lib/constants/
+- Establish proper file organization following Flutter conventions
+- Set up testing directories: test/, test/unit/, test/widget/, test/integration/
+- Create documentation directories: docs/, docs/architecture/, docs/api/
+
+ARCHITECTURAL FOUNDATION REQUIREMENTS:
+- Create main.dart with proper app initialization
+- Set up app.dart for application-level configuration
+- Create router.dart for navigation architecture
+- Set up dependency injection container
+- Create base classes and abstract interfaces
+- Establish theme and constants structure
+
+DEPENDENCY MANAGEMENT:
+- ALWAYS create comprehensive pubspec.yaml with ALL architectural dependencies
+- Include state management packages (provider, riverpod, bloc, etc.)
+- Add navigation packages (go_router, etc.)
+- Include development dependencies (flutter_test, mockito, etc.)
+- Set up analysis options and linting rules
+- Configure build settings and assets
+
+COMPLETE IMPLEMENTATION CHECKLIST FOR ARCHITECTURE:
+1. Create complete project directory structure
+2. Create comprehensive pubspec.yaml with all dependencies
+3. Create main.dart with proper initialization
+4. Create app.dart for application configuration
+5. Set up navigation architecture (router.dart)
+6. Create base classes and interfaces
+7. Set up dependency injection
+8. Create constants and configuration files
+9. Set up theme and styling architecture
+10. Create error handling and logging setup
+11. Set up testing infrastructure
+12. Create documentation structure
+
 IMPORTANT: 
 - ALWAYS put file_system calls inside ```python code blocks
 - ALWAYS provide the COMPLETE file content, not snippets
 - ALWAYS create directories before creating files in them
+- NEVER leave any imports unresolved
+- ALWAYS ensure architectural integrity and consistency
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:
@@ -524,6 +570,122 @@ IMPORTANT:
         except Exception as e:
             self.logger.error(f"Flutter environment verification failed: {e}")
             return ExecutionResult(success=False, error=str(e))
+
+    async def create_project_foundation(
+        self,
+        project_name: str,
+        requirements: Dict[str, Any],
+        context: Optional[TaskContext] = None,
+    ) -> ExecutionResult:
+        """Create the foundational project structure and architecture setup"""
+        task = f"""
+        Create complete Flutter project foundation for: {project_name}
+        
+        Requirements: {requirements}
+        
+        MANDATORY ARCHITECT RESPONSIBILITIES:
+        1. Create complete directory structure (lib/, test/, docs/, etc.)
+        2. Create comprehensive pubspec.yaml with ALL necessary dependencies
+        3. Create main.dart with proper app initialization
+        4. Create app.dart for application-level configuration
+        5. Set up navigation architecture (router.dart)
+        6. Create base classes and abstract interfaces
+        7. Set up dependency injection architecture
+        8. Create constants and configuration files
+        9. Set up theme and styling architecture
+        10. Create error handling and logging setup
+        11. Set up testing infrastructure
+        12. Create documentation structure
+        
+        ARCHITECTURAL DEPENDENCIES TO INCLUDE:
+        - State management (provider, riverpod, bloc, etc.)
+        - Navigation (go_router, etc.)
+        - HTTP client (dio, http, etc.)
+        - Local storage (shared_preferences, hive, etc.)
+        - Dependency injection (get_it, provider, etc.)
+        - Development tools (flutter_test, mockito, etc.)
+        - Code generation (json_annotation, build_runner, etc.)
+        
+        FOUNDATION FILES TO CREATE:
+        - pubspec.yaml (comprehensive dependencies)
+        - main.dart (app entry point)
+        - lib/app.dart (application configuration)
+        - lib/core/router.dart (navigation setup)
+        - lib/core/dependency_injection.dart (DI container)
+        - lib/core/constants.dart (app constants)
+        - lib/core/theme.dart (theme configuration)
+        - lib/core/error_handler.dart (error handling)
+        - lib/core/logger.dart (logging setup)
+        - Base classes for screens, widgets, services
+        - Testing setup files
+        
+        CRITICAL REQUIREMENTS:
+        - Use file_system tool to create ALL files and directories
+        - Provide COMPLETE file content, not snippets
+        - Ensure all files compile successfully
+        - Create proper import structure
+        - Follow Flutter/Dart conventions
+        - Set up proper architectural patterns
+        - Include comprehensive error handling
+        - Create testable architecture
+        """
+
+        return await self.execute(task, context)
+
+    async def create_base_classes(
+        self,
+        architecture_design: Dict[str, Any],
+        context: Optional[TaskContext] = None,
+    ) -> ExecutionResult:
+        """Create base classes and abstract interfaces for the architecture"""
+        task = f"""
+        Create base classes and abstract interfaces for Flutter architecture: {architecture_design}
+        
+        MANDATORY BASE CLASSES TO CREATE:
+        1. Base Screen/Page classes
+        2. Base Widget classes
+        3. Base Service interfaces
+        4. Base Repository interfaces
+        5. Base Model classes
+        6. Base State Management classes
+        7. Base API client interfaces
+        8. Base Error classes
+        9. Base Logger interfaces
+        10. Base Configuration classes
+        
+        SPECIFIC BASE FILES TO CREATE:
+        - lib/core/base/base_screen.dart (base screen class)
+        - lib/core/base/base_widget.dart (base widget class)
+        - lib/core/base/base_service.dart (base service interface)
+        - lib/core/base/base_repository.dart (base repository interface)
+        - lib/core/base/base_model.dart (base model class)
+        - lib/core/base/base_state.dart (base state management)
+        - lib/core/base/base_api_client.dart (base API client)
+        - lib/core/base/base_error.dart (base error classes)
+        - lib/core/base/base_logger.dart (base logger interface)
+        - lib/core/base/base_config.dart (base configuration)
+        
+        ARCHITECTURAL PATTERNS TO IMPLEMENT:
+        - Repository pattern interfaces
+        - Service layer interfaces
+        - Factory pattern for object creation
+        - Observer pattern for state management
+        - Strategy pattern for different implementations
+        - Singleton pattern for shared resources
+        - Dependency injection interfaces
+        
+        CRITICAL REQUIREMENTS:
+        - Use file_system tool to create ALL files
+        - Create lib/core/base/ directory structure
+        - Provide COMPLETE file content with proper abstractions
+        - Include comprehensive documentation
+        - Follow SOLID principles
+        - Create testable interfaces
+        - Include proper error handling
+        - Use Dart best practices (abstract classes, mixins, etc.)
+        """
+
+        return await self.execute(task, context)
 
     # Helper methods
     def _extract_architecture_files_from_response(
