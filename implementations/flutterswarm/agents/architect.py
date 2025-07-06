@@ -186,9 +186,35 @@ REQUIRED ACTIONS FOR EVERY TASK:
 3. List all created files at the end of your response
 4. Confirm files were actually written by checking the tool results
 
-Example tool usage:
-- Create directory: file_system(operation='mkdir', path='/full/path/to/directory')
-- Create file: file_system(operation='write', path='/full/path/to/file.dart', content='complete file content')
+CRITICAL: You must wrap ALL file_system calls in Python code blocks like this:
+
+```python
+file_system(operation='mkdir', path='lib/screens')
+file_system(operation='write', path='lib/main.dart', content='''
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: Text('My App')),
+        body: Center(child: Text('Hello World')),
+      ),
+    );
+  }
+}
+''')
+```
+
+IMPORTANT: 
+- ALWAYS put file_system calls inside ```python code blocks
+- ALWAYS provide the COMPLETE file content, not snippets
+- ALWAYS create directories before creating files in them
 """
 
     def _get_tools(self) -> List[Dict[str, Any]]:

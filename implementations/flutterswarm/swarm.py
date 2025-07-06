@@ -870,25 +870,9 @@ class FlutterSwarm(BaseSwarm):
         """Synchronous wrapper for file system operations."""
         import asyncio
 
-        try:
-            # Run the async method in the current event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we're already in an event loop, we need to handle this differently
-                # Create a task and run it
-                task = loop.create_task(self.file_system_instance.execute(**kwargs))
-                # Since we can't await in a sync function, we'll use a different approach
-                # Store the operation for later execution
-                self.logger.info(f"Executing file system operation: {kwargs}")
-                return asyncio.run_coroutine_threadsafe(
-                    self.file_system_instance.execute(**kwargs), loop
-                ).result()
-            else:
-                return asyncio.run(self.file_system_instance.execute(**kwargs))
-        except Exception as e:
-            self.logger.error(f"Error in file system operation: {str(e)}")
-            # Try direct execution for simple operations
-            return self._direct_file_system_execute(**kwargs)
+        # Always use direct execution since it's more reliable
+        self.logger.info(f"Executing file system operation: {kwargs}")
+        return self._direct_file_system_execute(**kwargs)
 
     def _sync_flutter_cli_wrapper(self, **kwargs):
         """Synchronous wrapper for Flutter CLI operations."""
@@ -928,26 +912,57 @@ class FlutterSwarm(BaseSwarm):
 
         operation = kwargs.get("operation")
         path = kwargs.get("path")
-        content = kwargs.get("content")
+        content = kwargs.get("content", "")
 
         try:
+            # Resolve relative paths
+            if not os.path.isabs(path):
+                path = os.path.join(self.project_path, path)
+
             if operation == "write":
                 # Create directory if it doesn't exist
-                os.makedirs(os.path.dirname(path), exist_ok=True)
+                dir_path = os.path.dirname(path)
+                if dir_path:
+                    os.makedirs(dir_path, exist_ok=True)
+                    self.logger.info(f"Created directory: {dir_path}")
+
                 with open(path, "w", encoding="utf-8") as f:
                     f.write(content)
-                self.logger.info(f"File written: {path}")
-                return {"success": True, "message": f"File written: {path}"}
+                self.logger.info(f"File written: {path} ({len(content)} characters)")
+                return {
+                    "success": True,
+                    "message": f"File written: {path}",
+                    "path": path,
+                }
 
             elif operation == "mkdir":
                 os.makedirs(path, exist_ok=True)
                 self.logger.info(f"Directory created: {path}")
-                return {"success": True, "message": f"Directory created: {path}"}
+                return {
+                    "success": True,
+                    "message": f"Directory created: {path}",
+                    "path": path,
+                }
 
             elif operation == "read":
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
-                return {"success": True, "content": content}
+                return {"success": True, "content": content, "path": path}
+
+            elif operation == "exists":
+                exists = os.path.exists(path)
+                return {"success": True, "exists": exists, "path": path}
+
+            elif operation == "list":
+                if os.path.isdir(path):
+                    items = os.listdir(path)
+                    return {"success": True, "items": items, "path": path}
+                else:
+                    return {
+                        "success": False,
+                        "error": "Path is not a directory",
+                        "path": path,
+                    }
 
             else:
                 self.logger.warning(f"Unknown file system operation: {operation}")
@@ -955,7 +970,8 @@ class FlutterSwarm(BaseSwarm):
 
         except Exception as e:
             self.logger.error(f"Direct file system operation failed: {str(e)}")
-            return {"success": False, "error": str(e)}
+            self.logger.error(f"Operation: {operation}, Path: {path}")
+            return {"success": False, "error": str(e), "path": path}
 
     async def _dispatch_action(
         self, agent_name: str, action: str, input_data: Any, context: Dict[str, Any]
