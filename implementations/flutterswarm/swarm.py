@@ -15,6 +15,614 @@ from typing import Any, Dict, List, Optional, Union
 import multiagenticswarm as mas
 
 
+# Shared Project Memory System using mas.Trigger
+class SharedProjectMemory:
+    """
+    Shared project memory that accumulates knowledge across agents.
+    Uses mas.Trigger to maintain state continuity between agent phases.
+    """
+
+    def __init__(self, project_path: str):
+        self.project_path = project_path
+        self.memory = {
+            "architecture_decisions": {},
+            "implementation_patterns": {},
+            "file_structure": {},
+            "dependencies": [],
+            "completed_tasks": [],
+            "partial_work": {},
+            "agent_handoffs": [],
+        }
+
+        # Create trigger for memory updates
+        self.memory_trigger = mas.Trigger(
+            name="project_memory_update",
+            description="Triggered when project memory needs updating",
+            condition_string="agent_completion or task_progress or file_creation",
+        )
+
+    def update_memory(self, agent_name: str, task_result: dict, context: dict):
+        """Update shared memory with agent results"""
+        self.memory["agent_handoffs"].append(
+            {
+                "agent": agent_name,
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+                "task_result": task_result,
+                "context": context,
+            }
+        )
+
+        # Fire memory update trigger
+        self.memory_trigger.fire(
+            {
+                "agent": agent_name,
+                "memory_state": self.memory,
+                "project_path": self.project_path,
+            }
+        )
+
+    def get_context_for_agent(self, agent_name: str) -> dict:
+        """Get comprehensive context for an agent including actual file contents"""
+        import os
+
+        # Gather current project state
+        current_files = {}
+        file_structure = {}
+
+        try:
+            for root, dirs, files in os.walk(self.project_path):
+                rel_root = os.path.relpath(root, self.project_path)
+                file_structure[rel_root] = {"directories": dirs, "files": files}
+
+                for file in files:
+                    if file.endswith((".dart", ".yaml", ".json", ".md")):
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, self.project_path)
+                        try:
+                            with open(file_path, "r", encoding="utf-8") as f:
+                                content = f.read()
+                            current_files[rel_path] = {
+                                "content": content,
+                                "size": len(content),
+                                "type": file.split(".")[-1],
+                                "complete": self._is_file_complete(content),
+                            }
+                        except Exception as e:
+                            current_files[rel_path] = {
+                                "error": str(e),
+                                "size": 0,
+                                "type": file.split(".")[-1],
+                                "complete": False,
+                            }
+        except Exception as e:
+            # If we can't read the project, just use what we have in memory
+            pass
+
+        # Update memory with current state
+        self.memory["file_structure"] = file_structure
+        self.memory["current_files"] = current_files
+
+        return {
+            "project_path": self.project_path,
+            "previous_work": self.memory,
+            "last_agent": self.memory["agent_handoffs"][-1]
+            if self.memory["agent_handoffs"]
+            else None,
+            "file_structure": file_structure,
+            "current_files": current_files,
+            "architecture_decisions": self.memory["architecture_decisions"],
+            "implementation_patterns": self.memory["implementation_patterns"],
+            "agent_name": agent_name,
+            "handoff_count": len(self.memory["agent_handoffs"]),
+        }
+
+    def _is_file_complete(self, content: str) -> bool:
+        """Check if a file appears to be complete"""
+        if not content or len(content.strip()) < 20:
+            return False
+
+        # Check for obvious incomplete markers
+        incomplete_patterns = [
+            "TODO",
+            "FIXME",
+            "// ...",
+            "class }",
+            "void }",
+            "{ }",
+            "get }",
+            "set }",
+            "String }",
+            "Widget }",
+        ]
+
+        for pattern in incomplete_patterns:
+            if pattern in content:
+                return False
+
+        # Check balanced braces for Dart files
+        if "{" in content:
+            if content.count("{") != content.count("}"):
+                return False
+
+        # Check balanced parentheses
+        if "(" in content:
+            if content.count("(") != content.count(")"):
+                return False
+
+        # Check for incomplete structures at end
+        content_lines = content.strip().split("\n")
+        if content_lines:
+            last_line = content_lines[-1].strip()
+            if last_line.endswith(
+                ("class", "void", "String", "Widget", "get", "set", "{")
+            ):
+                return False
+
+        return True
+
+
+# Task Continuation System using mas.Automation
+class TaskContinuation:
+    """
+    Manages task continuation when agents hit output limits.
+    Uses mas.Automation to detect incomplete work and resume tasks.
+    """
+
+    def __init__(self, project_path: str):
+        self.project_path = project_path
+        self.incomplete_tasks = {}
+
+        # Create trigger for task continuation
+        self.continuation_trigger = mas.Trigger(
+            name="task_continuation_trigger",
+            description="Triggered when tasks need continuation",
+            condition_string="output_limit_reached or incomplete_task_detected",
+        )
+
+    def detect_incomplete_work(
+        self, agent_output: str, expected_deliverables: list, project_path: str = None
+    ) -> dict:
+        """Detect if agent work is incomplete using multiple validation methods"""
+        incomplete_items = []
+        truncation_indicators = []
+        code_issues = []
+
+        # Method 1: Check for expected deliverables in output
+        for deliverable in expected_deliverables:
+            if deliverable not in agent_output:
+                incomplete_items.append(deliverable)
+
+        # Method 2: Check for truncation indicators
+        truncation_patterns = [
+            r"\w+\s*$",  # Word followed by whitespace at end (likely cut off)
+            r"[{(\[]\s*$",  # Opening brace/bracket at end
+            r"=\s*$",  # Assignment operator at end
+            r"\.\s*$",  # Dot at end (method call cut off)
+            r"@\w*\s*$",  # Annotation cut off
+            r"import\s+[\w.]*\s*$",  # Import statement cut off
+            r"class\s+\w*\s*$",  # Class declaration cut off
+            r"void\s+\w*\s*$",  # Method declaration cut off
+            r"String\s+get\s*$",  # Getter cut off
+            r"const\s+\w*\s*$",  # Const declaration cut off
+        ]
+
+        import re
+
+        for pattern in truncation_patterns:
+            if re.search(pattern, agent_output):
+                truncation_indicators.append(
+                    f"Output likely truncated: ends with pattern '{pattern}'"
+                )
+
+        # Method 3: Check for incomplete code structures if project_path provided
+        if project_path:
+            import os
+
+            for root, dirs, files in os.walk(project_path):
+                for file in files:
+                    if file.endswith(".dart"):
+                        file_path = os.path.join(root, file)
+                        try:
+                            with open(file_path, "r") as f:
+                                content = f.read()
+
+                            # Check for incomplete structures
+                            if "{" in content and content.count("{") != content.count(
+                                "}"
+                            ):
+                                code_issues.append(f"{file_path}: Mismatched braces")
+                            if "TODO" in content or "FIXME" in content:
+                                code_issues.append(f"{file_path}: Contains TODO/FIXME")
+                            if content.strip().endswith(
+                                ("class", "void", "String", "Widget", "{")
+                            ):
+                                code_issues.append(
+                                    f"{file_path}: Incomplete code structure"
+                                )
+                            if len(content.strip()) < 50:
+                                code_issues.append(
+                                    f"{file_path}: File too small, likely incomplete"
+                                )
+
+                        except Exception as e:
+                            code_issues.append(
+                                f"{file_path}: Could not read file - {str(e)}"
+                            )
+
+        # Determine if work is incomplete
+        is_incomplete = bool(incomplete_items or truncation_indicators or code_issues)
+
+        if is_incomplete:
+            return {
+                "is_incomplete": True,
+                "missing_items": incomplete_items,
+                "truncation_indicators": truncation_indicators,
+                "code_issues": code_issues,
+                "completion_percentage": max(
+                    0,
+                    (len(expected_deliverables) - len(incomplete_items))
+                    / len(expected_deliverables)
+                    * 100,
+                )
+                if expected_deliverables
+                else 0,
+            }
+
+        return {"is_incomplete": False, "completion_percentage": 100}
+
+    def create_continuation_prompt(
+        self, agent_name: str, incomplete_work: dict, project_path: str = None
+    ) -> str:
+        """Create a detailed prompt to continue incomplete work"""
+        prompt = f"""
+        URGENT CONTINUATION TASK for {agent_name}:
+        
+        Your previous work was incomplete. Here's the detailed analysis:
+        
+        MISSING DELIVERABLES: {incomplete_work.get('missing_items', [])}
+        TRUNCATION INDICATORS: {incomplete_work.get('truncation_indicators', [])}
+        CODE ISSUES: {incomplete_work.get('code_issues', [])}
+        COMPLETION STATUS: {incomplete_work.get('completion_percentage', 0):.1f}%
+        
+        """
+
+        # Add specific instructions based on issues found
+        if incomplete_work.get("truncation_indicators"):
+            prompt += """
+        CRITICAL: Your previous output was truncated mid-sentence/mid-code. 
+        You MUST complete the code that was cut off and continue until ALL deliverables are complete.
+        """
+
+        if incomplete_work.get("code_issues"):
+            prompt += """
+        CODE QUALITY ISSUES DETECTED: 
+        Please fix these specific issues and complete all incomplete code structures.
+        """
+
+        # Add current project state if available
+        if project_path:
+            try:
+                import os
+
+                existing_files = []
+                for root, dirs, files in os.walk(project_path):
+                    for file in files:
+                        if file.endswith((".dart", ".yaml", ".json", ".md")):
+                            rel_path = os.path.relpath(
+                                os.path.join(root, file), project_path
+                            )
+                            existing_files.append(rel_path)
+
+                if existing_files:
+                    prompt += f"""
+        
+        CURRENT PROJECT STATE:
+        Existing files: {existing_files}
+        
+        Please read these files and build upon them. DO NOT recreate existing work.
+        """
+            except:
+                pass
+
+        prompt += """
+        
+        COMPLETION REQUIREMENTS:
+        1. Complete ALL missing deliverables
+        2. Fix ALL truncated/incomplete code
+        3. Ensure ALL files are syntactically correct
+        4. Verify ALL imports resolve correctly
+        5. Use file_system tool to write COMPLETE files
+        6. DO NOT stop until everything is finished
+        
+        CRITICAL: Continue working until you have addressed every single issue listed above.
+        """
+
+        return prompt
+
+
+# Progressive Enhancement System
+class ProgressiveEnhancement:
+    """
+    Ensures agents build upon existing work rather than recreating.
+    Uses mas.Trigger to coordinate progressive development.
+    """
+
+    def __init__(self, project_path: str):
+        self.project_path = project_path
+        self.enhancement_trigger = mas.Trigger(
+            name="progressive_enhancement",
+            description="Triggered when agents should enhance existing work",
+            condition_string="existing_work_detected or agent_handoff",
+        )
+
+    def analyze_existing_work(self, agent_name: str) -> dict:
+        """Analyze what work already exists for progressive enhancement"""
+        import os
+
+        existing_files = []
+
+        for root, dirs, files in os.walk(self.project_path):
+            for file in files:
+                if file.endswith((".dart", ".yaml", ".json", ".md")):
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, "r") as f:
+                            content = f.read()
+                        existing_files.append(
+                            {
+                                "path": file_path,
+                                "size": len(content),
+                                "type": file.split(".")[-1],
+                                "content_preview": content[:200] + "..."
+                                if len(content) > 200
+                                else content,
+                            }
+                        )
+                    except:
+                        continue
+
+        return {
+            "existing_files": existing_files,
+            "project_structure": self._analyze_project_structure(),
+            "enhancement_opportunities": self._identify_enhancement_opportunities(
+                existing_files
+            ),
+        }
+
+    def _analyze_project_structure(self) -> dict:
+        """Analyze the current project structure"""
+        structure = {}
+        import os
+
+        for root, dirs, files in os.walk(self.project_path):
+            rel_root = os.path.relpath(root, self.project_path)
+            structure[rel_root] = {
+                "directories": dirs,
+                "files": files,
+                "dart_files": [f for f in files if f.endswith(".dart")],
+                "config_files": [f for f in files if f.endswith((".yaml", ".json"))],
+            }
+
+        return structure
+
+    def _identify_enhancement_opportunities(self, existing_files: list) -> list:
+        """Identify opportunities for progressive enhancement"""
+        opportunities = []
+
+        # Check for incomplete files
+        for file_info in existing_files:
+            if file_info["size"] < 100:  # Very small files might be incomplete
+                opportunities.append(
+                    f"Enhance {file_info['path']} - appears incomplete"
+                )
+
+        # Check for missing common files
+        file_paths = [f["path"] for f in existing_files]
+        common_files = ["pubspec.yaml", "main.dart", "README.md"]
+
+        for common_file in common_files:
+            if not any(common_file in path for path in file_paths):
+                opportunities.append(f"Create missing {common_file}")
+
+        return opportunities
+
+
+# Validation Gates System
+class ValidationGates:
+    """
+    Implements validation gates between agent phases.
+    Uses mas.Automation to ensure completeness before handoff.
+    """
+
+    def __init__(self, project_path: str):
+        self.project_path = project_path
+        self.validation_trigger = mas.Trigger(
+            name="validation_gates",
+            description="Validates agent work before phase transitions",
+            condition_string="agent_completion or phase_transition",
+        )
+
+    async def validate_agent_work(
+        self, agent_name: str, expected_deliverables: list
+    ) -> dict:
+        """Validate that agent work meets requirements with comprehensive checks"""
+        validation_result = {
+            "agent": agent_name,
+            "passed": True,
+            "issues": [],
+            "missing_deliverables": [],
+            "compilation_issues": [],
+            "recommendations": [],
+        }
+
+        # Check for expected deliverables
+        for deliverable in expected_deliverables:
+            if not self._check_deliverable_exists(deliverable):
+                validation_result["missing_deliverables"].append(deliverable)
+                validation_result["passed"] = False
+
+        # Check code quality
+        quality_issues = self._check_code_quality()
+        if quality_issues:
+            validation_result["issues"].extend(quality_issues)
+            validation_result["passed"] = False
+
+        # Check Flutter compilation if we have Dart files
+        dart_files_exist = any(
+            f.endswith(".dart")
+            for root, dirs, files in __import__("os").walk(self.project_path)
+            for f in files
+        )
+        if dart_files_exist:
+            compilation_issues = await self._check_flutter_compilation()
+            if compilation_issues:
+                validation_result["compilation_issues"].extend(compilation_issues)
+                validation_result["passed"] = False
+
+        # Generate recommendations
+        if not validation_result["passed"]:
+            validation_result["recommendations"] = self._generate_recommendations(
+                validation_result
+            )
+
+        return validation_result
+
+    def _check_deliverable_exists(self, deliverable: str) -> bool:
+        """Check if a deliverable exists"""
+        import os
+
+        deliverable_path = os.path.join(self.project_path, deliverable)
+        return os.path.exists(deliverable_path)
+
+    def _check_code_quality(self) -> list:
+        """Check code quality issues including compilation"""
+        issues = []
+        import os
+
+        # Check Dart file quality
+        for root, dirs, files in os.walk(self.project_path):
+            for file in files:
+                if file.endswith(".dart"):
+                    file_path = os.path.join(root, file)
+                    try:
+                        with open(file_path, "r") as f:
+                            content = f.read()
+
+                        # Basic syntax checks
+                        if len(content) < 50:
+                            issues.append(f"{file_path} appears too small/incomplete")
+                        if content.count("{") != content.count("}"):
+                            issues.append(f"{file_path} has mismatched braces")
+                        if content.count("(") != content.count(")"):
+                            issues.append(f"{file_path} has mismatched parentheses")
+                        if "TODO" in content or "FIXME" in content:
+                            issues.append(f"{file_path} contains TODO/FIXME markers")
+
+                        # Check for incomplete structures
+                        if content.strip().endswith(
+                            ("class", "void", "String", "Widget", "get", "set", "{")
+                        ):
+                            issues.append(f"{file_path} has incomplete code structure")
+
+                        # Check for proper imports
+                        if "import " in content:
+                            import_lines = [
+                                line.strip()
+                                for line in content.split("\n")
+                                if line.strip().startswith("import")
+                            ]
+                            for import_line in import_lines:
+                                if not import_line.endswith(";"):
+                                    issues.append(
+                                        f"{file_path} has incomplete import: {import_line}"
+                                    )
+
+                        # Check for unmatched quotes
+                        single_quotes = content.count("'")
+                        double_quotes = content.count('"')
+                        if single_quotes % 2 != 0:
+                            issues.append(f"{file_path} has unmatched single quotes")
+                        if double_quotes % 2 != 0:
+                            issues.append(f"{file_path} has unmatched double quotes")
+
+                    except Exception as e:
+                        issues.append(f"Could not read {file_path}: {str(e)}")
+
+        # Check if pubspec.yaml is valid
+        pubspec_path = os.path.join(self.project_path, "pubspec.yaml")
+        if os.path.exists(pubspec_path):
+            try:
+                with open(pubspec_path, "r") as f:
+                    content = f.read()
+                if "name:" not in content:
+                    issues.append(f"pubspec.yaml missing name field")
+                if "dependencies:" not in content:
+                    issues.append(f"pubspec.yaml missing dependencies section")
+            except Exception as e:
+                issues.append(f"Could not read pubspec.yaml: {str(e)}")
+        else:
+            issues.append("pubspec.yaml file missing")
+
+        return issues
+
+    async def _check_flutter_compilation(self) -> list:
+        """Check if Flutter project compiles successfully"""
+        issues = []
+        import asyncio
+        import os
+
+        # Check if pubspec.yaml exists first
+        pubspec_path = os.path.join(self.project_path, "pubspec.yaml")
+        if not os.path.exists(pubspec_path):
+            return ["pubspec.yaml missing - cannot check compilation"]
+
+        try:
+            # Run flutter analyze
+            proc = await asyncio.create_subprocess_shell(
+                "flutter analyze",
+                cwd=self.project_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+
+            if proc.returncode != 0:
+                analyze_output = stdout.decode() + stderr.decode()
+                issues.append(f"Flutter analyze failed: {analyze_output}")
+
+            # Run dart analyze for additional checks
+            proc = await asyncio.create_subprocess_shell(
+                "dart analyze",
+                cwd=self.project_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+
+            if proc.returncode != 0:
+                dart_output = stdout.decode() + stderr.decode()
+                issues.append(f"Dart analyze failed: {dart_output}")
+
+        except Exception as e:
+            issues.append(f"Could not run compilation checks: {str(e)}")
+
+        return issues
+
+    def _generate_recommendations(self, validation_result: dict) -> list:
+        """Generate recommendations based on validation results"""
+        recommendations = []
+
+        if validation_result["missing_deliverables"]:
+            recommendations.append("Complete missing deliverables before proceeding")
+
+        if validation_result["issues"]:
+            recommendations.append("Fix code quality issues identified")
+
+        recommendations.append("Re-run validation after fixes")
+
+        return recommendations
+
+
 # Define our own decorator for comprehensive logging
 def comprehensive_async_log_decorator(logger_name):
     def decorator(func):
@@ -82,6 +690,12 @@ class FlutterSwarm(BaseSwarm):
         verbose_logging: bool = False,
         **kwargs,
     ):
+        # Initialize coordination systems to fix isolation issues
+        self.shared_memory = SharedProjectMemory(project_path)
+        self.task_continuation = TaskContinuation(project_path)
+        self.progressive_enhancement = ProgressiveEnhancement(project_path)
+        self.validation_gates = ValidationGates(project_path)
+
         # Auto-initialize comprehensive logging for universal coverage
         if enable_comprehensive_logging:
             from multiagenticswarm.logging import setup_logging
@@ -473,7 +1087,24 @@ class FlutterSwarm(BaseSwarm):
         execution_start_time = __import__("time").time()
 
         try:
+            # Initialize expected deliverables for validation
+            architect_deliverables = [
+                "pubspec.yaml",
+                "main.dart",
+                "lib/app.dart",
+                "lib/core/",
+            ]
+            ui_designer_deliverables = ["lib/screens/", "lib/widgets/", "lib/theme/"]
+            developer_deliverables = ["lib/services/", "lib/models/", "lib/providers/"]
+            tester_deliverables = ["test/", "integration_test/"]
+
             # Step 1: Architect - Design system architecture
+            # Get enhanced context from shared memory
+            architect_enhanced_context = self.shared_memory.get_context_for_agent(
+                "architect"
+            )
+            architect_enhanced_context.update(context)
+
             # Log the step with comprehensive details
             step_info = {
                 "step": "architect_design",
@@ -536,24 +1167,27 @@ class FlutterSwarm(BaseSwarm):
                 output_data=architect_result.output,
             )
 
-            # Execute architect's code immediately
+            # Ensure architect work is fully complete using recursive continuation
             if architect_result.success:
-                # Extract the actual response content for code parsing
-                output_text = ""
-                if hasattr(architect_result, "output"):
-                    if isinstance(architect_result.output, dict):
-                        # Look for common response keys
-                        for key in ["content", "response", "output", "message"]:
-                            if key in architect_result.output:
-                                output_text = str(architect_result.output[key])
-                                break
-                        if not output_text:
-                            output_text = str(architect_result.output)
-                    else:
-                        output_text = str(architect_result.output)
+                architect_result = await self.ensure_agent_work_completion(
+                    "architect",
+                    architect_result,
+                    architect_deliverables,
+                    architect_enhanced_context,
+                )
 
-                if output_text:
-                    await self._parse_and_execute_code(output_text)
+                # Validate architect deliverables
+                validation_result = await self.validation_gates.validate_agent_work(
+                    "architect", architect_deliverables
+                )
+                if not validation_result["passed"]:
+                    self.logger.error(
+                        f"Architect validation failed: {validation_result['issues']}"
+                    )
+                    if validation_result.get("compilation_issues"):
+                        self.logger.error(
+                            f"Architect compilation issues: {validation_result['compilation_issues']}"
+                        )
 
                 all_outputs["architect"] = architect_result.output
                 context["architect_result"] = architect_result.output
@@ -569,12 +1203,27 @@ class FlutterSwarm(BaseSwarm):
                 )
 
             # Step 2: UI Designer - Create UI designs
+            # Get enhanced context including progressive enhancement analysis
+            ui_designer_enhanced_context = self.shared_memory.get_context_for_agent(
+                "ui_designer"
+            )
+            progressive_analysis = self.progressive_enhancement.analyze_existing_work(
+                "ui_designer"
+            )
+            ui_designer_enhanced_context.update(
+                {
+                    **context,
+                    "architecture_design": architect_result.output,
+                    "existing_work_analysis": progressive_analysis,
+                }
+            )
+
             self.logger.log_workflow_step(
                 "create_flutter_app", "ui_design", 2, "flutter_ui_designer", "started"
             )
             ui_designer_context = TaskContext(
                 project_path=self.project_path,
-                metadata={**context, "architecture_design": architect_result.output},
+                metadata=ui_designer_enhanced_context,
             )
             ui_designer_result = await self.ui_designer.design_ui(
                 context=ui_designer_context
@@ -591,24 +1240,27 @@ class FlutterSwarm(BaseSwarm):
                 output_data=ui_designer_result.output,
             )
 
-            # Execute UI designer's code immediately
+            # Ensure UI designer work is fully complete using recursive continuation
             if ui_designer_result.success:
-                # Extract the actual response content for code parsing
-                output_text = ""
-                if hasattr(ui_designer_result, "output"):
-                    if isinstance(ui_designer_result.output, dict):
-                        # Look for common response keys
-                        for key in ["content", "response", "output", "message"]:
-                            if key in ui_designer_result.output:
-                                output_text = str(ui_designer_result.output[key])
-                                break
-                        if not output_text:
-                            output_text = str(ui_designer_result.output)
-                    else:
-                        output_text = str(ui_designer_result.output)
+                ui_designer_result = await self.ensure_agent_work_completion(
+                    "ui_designer",
+                    ui_designer_result,
+                    ui_designer_deliverables,
+                    ui_designer_enhanced_context,
+                )
 
-                if output_text:
-                    await self._parse_and_execute_code(output_text)
+                # Validate UI designer deliverables
+                validation_result = await self.validation_gates.validate_agent_work(
+                    "ui_designer", ui_designer_deliverables
+                )
+                if not validation_result["passed"]:
+                    self.logger.error(
+                        f"UI Designer validation failed: {validation_result['issues']}"
+                    )
+                    if validation_result.get("compilation_issues"):
+                        self.logger.error(
+                            f"UI Designer compilation issues: {validation_result['compilation_issues']}"
+                        )
 
                 all_outputs["ui_designer"] = ui_designer_result.output
                 context["ui_design"] = ui_designer_result.output
@@ -626,6 +1278,21 @@ class FlutterSwarm(BaseSwarm):
                 )
 
             # Step 3: Developer - Implement features
+            # Get enhanced context with full project knowledge
+            developer_enhanced_context = self.shared_memory.get_context_for_agent(
+                "developer"
+            )
+            progressive_analysis = self.progressive_enhancement.analyze_existing_work(
+                "developer"
+            )
+            developer_enhanced_context.update(
+                {
+                    **context,
+                    "ui_design": ui_designer_result.output,
+                    "existing_work_analysis": progressive_analysis,
+                }
+            )
+
             self.logger.log_workflow_step(
                 "create_flutter_app",
                 "feature_implementation",
@@ -635,7 +1302,7 @@ class FlutterSwarm(BaseSwarm):
             )
             developer_context = TaskContext(
                 project_path=self.project_path,
-                metadata={**context, "ui_design": ui_designer_result.output},
+                metadata=developer_enhanced_context,
             )
             developer_result = await self.developer.implement_feature(
                 feature_description=f"Implement all features: {', '.join(features)}",
@@ -653,24 +1320,27 @@ class FlutterSwarm(BaseSwarm):
                 output_data=developer_result.output,
             )
 
-            # Execute developer's code immediately
+            # Ensure developer work is fully complete using recursive continuation
             if developer_result.success:
-                # Extract the actual response content for code parsing
-                output_text = ""
-                if hasattr(developer_result, "output"):
-                    if isinstance(developer_result.output, dict):
-                        # Look for common response keys
-                        for key in ["content", "response", "output", "message"]:
-                            if key in developer_result.output:
-                                output_text = str(developer_result.output[key])
-                                break
-                        if not output_text:
-                            output_text = str(developer_result.output)
-                    else:
-                        output_text = str(developer_result.output)
+                developer_result = await self.ensure_agent_work_completion(
+                    "developer",
+                    developer_result,
+                    developer_deliverables,
+                    developer_enhanced_context,
+                )
 
-                if output_text:
-                    await self._parse_and_execute_code(output_text)
+                # Validate developer deliverables
+                validation_result = await self.validation_gates.validate_agent_work(
+                    "developer", developer_deliverables
+                )
+                if not validation_result["passed"]:
+                    self.logger.error(
+                        f"Developer validation failed: {validation_result['issues']}"
+                    )
+                    if validation_result.get("compilation_issues"):
+                        self.logger.error(
+                            f"Developer compilation issues: {validation_result['compilation_issues']}"
+                        )
 
                 all_outputs["developer"] = developer_result.output
                 context["implementation"] = developer_result.output
@@ -686,31 +1356,47 @@ class FlutterSwarm(BaseSwarm):
                 )
 
             # Step 4: Tester - Create tests
+            # Get enhanced context with full project knowledge
+            tester_enhanced_context = self.shared_memory.get_context_for_agent("tester")
+            progressive_analysis = self.progressive_enhancement.analyze_existing_work(
+                "tester"
+            )
+            tester_enhanced_context.update(
+                {
+                    **context,
+                    "implementation": developer_result.output,
+                    "existing_work_analysis": progressive_analysis,
+                }
+            )
+
             self.logger.info("Step 4: Tester creating tests...")
             tester_context = TaskContext(
                 project_path=self.project_path,
-                metadata={**context, "implementation": developer_result.output},
+                metadata=tester_enhanced_context,
             )
             tester_result = await self.tester.write_tests(context=tester_context)
 
-            # Execute tester's code immediately
+            # Ensure tester work is fully complete using recursive continuation
             if tester_result.success:
-                # Extract the actual response content for code parsing
-                output_text = ""
-                if hasattr(tester_result, "output"):
-                    if isinstance(tester_result.output, dict):
-                        # Look for common response keys
-                        for key in ["content", "response", "output", "message"]:
-                            if key in tester_result.output:
-                                output_text = str(tester_result.output[key])
-                                break
-                        if not output_text:
-                            output_text = str(tester_result.output)
-                    else:
-                        output_text = str(tester_result.output)
+                tester_result = await self.ensure_agent_work_completion(
+                    "tester",
+                    tester_result,
+                    tester_deliverables,
+                    tester_enhanced_context,
+                )
 
-                if output_text:
-                    await self._parse_and_execute_code(output_text)
+                # Validate tester deliverables
+                validation_result = await self.validation_gates.validate_agent_work(
+                    "tester", tester_deliverables
+                )
+                if not validation_result["passed"]:
+                    self.logger.warning(
+                        f"Tester validation failed: {validation_result['issues']}"
+                    )
+                    if validation_result.get("compilation_issues"):
+                        self.logger.warning(
+                            f"Tester compilation issues: {validation_result['compilation_issues']}"
+                        )
 
                 all_outputs["tester"] = tester_result.output
             else:
@@ -718,6 +1404,39 @@ class FlutterSwarm(BaseSwarm):
                     f"Tester failed but continuing: {tester_result.error_message}"
                 )
                 all_outputs["tester"] = tester_result.error_message
+
+            # Final Integration Phase - Ensure all pieces fit together
+            self.logger.info("Starting final integration phase...")
+            final_validation = await self.validation_gates.validate_agent_work(
+                "final_integration",
+                architect_deliverables
+                + ui_designer_deliverables
+                + developer_deliverables
+                + tester_deliverables,
+            )
+
+            if not final_validation["passed"]:
+                self.logger.error(
+                    f"Final integration validation failed: {final_validation['issues']}"
+                )
+                # Create repair tasks for any missing pieces
+                for issue in final_validation["issues"]:
+                    self.logger.warning(f"Integration issue: {issue}")
+
+            # Update final project state in shared memory
+            final_project_state = {
+                "all_agent_outputs": all_outputs,
+                "final_validation": final_validation,
+                "project_structure": self.progressive_enhancement.analyze_existing_work(
+                    "final_integration"
+                ),
+                "completion_timestamp": __import__("datetime")
+                .datetime.now()
+                .isoformat(),
+            }
+            self.shared_memory.update_memory(
+                "final_integration", final_project_state, context
+            )
 
             # Aggregate results
             execution_time = __import__("time").time() - execution_start_time
@@ -734,6 +1453,14 @@ class FlutterSwarm(BaseSwarm):
                     "created_files": all_created_files,
                     "modified_files": all_modified_files,
                     "agent_results": all_outputs,
+                    "shared_memory_state": self.shared_memory.memory,
+                    "final_validation": final_validation,
+                    "coordination_systems": {
+                        "shared_memory": "active",
+                        "task_continuation": "active",
+                        "progressive_enhancement": "active",
+                        "validation_gates": "active",
+                    },
                 },
             )
 
@@ -1527,6 +2254,214 @@ class FlutterSwarm(BaseSwarm):
             else:
                 context[action] = result
         return result
+
+    async def ensure_agent_work_completion(
+        self,
+        agent_name: str,
+        agent_result: ExecutionResult,
+        expected_deliverables: list,
+        enhanced_context: dict,
+    ) -> ExecutionResult:
+        """
+        Ensure agent work is fully complete using recursive continuation.
+        This is the core fix for the completion problem.
+        """
+        if not agent_result.success:
+            return agent_result
+
+        # Extract output text
+        output_text = ""
+        if hasattr(agent_result, "output"):
+            if isinstance(agent_result.output, dict):
+                for key in ["content", "response", "output", "message"]:
+                    if key in agent_result.output:
+                        output_text = str(agent_result.output[key])
+                        break
+                if not output_text:
+                    output_text = str(agent_result.output)
+            else:
+                output_text = str(agent_result.output)
+
+        # Parse and execute initial code
+        if output_text:
+            await self._parse_and_execute_code(output_text)
+
+        # Update shared memory with initial results
+        self.shared_memory.update_memory(
+            agent_name, agent_result.output, enhanced_context
+        )
+
+        # Recursive continuation loop until work is complete
+        max_continuations = 5
+        continuation_count = 0
+        last_successful_output = output_text
+
+        while continuation_count < max_continuations:
+            incompleteness_check = self.task_continuation.detect_incomplete_work(
+                last_successful_output, expected_deliverables, self.project_path
+            )
+
+            if not incompleteness_check["is_incomplete"]:
+                self.logger.info(
+                    f"{agent_name} work completed successfully after {continuation_count} continuations"
+                )
+                break
+
+            continuation_count += 1
+            self.logger.warning(
+                f"{agent_name} work incomplete (attempt {continuation_count}): {incompleteness_check['completion_percentage']}%"
+            )
+
+            # Log specific issues found
+            if incompleteness_check.get("truncation_indicators"):
+                self.logger.warning(
+                    f"Truncation indicators: {incompleteness_check['truncation_indicators']}"
+                )
+            if incompleteness_check.get("code_issues"):
+                self.logger.warning(
+                    f"Code issues: {incompleteness_check['code_issues']}"
+                )
+            if incompleteness_check.get("missing_items"):
+                self.logger.warning(
+                    f"Missing items: {incompleteness_check['missing_items']}"
+                )
+
+            continuation_prompt = self.task_continuation.create_continuation_prompt(
+                agent_name, incompleteness_check, self.project_path
+            )
+
+            # Get the appropriate agent
+            agent_mapping = {
+                "architect": self.architect,
+                "developer": self.developer,
+                "ui_designer": self.ui_designer,
+                "tester": self.tester,
+            }
+
+            agent = agent_mapping.get(agent_name)
+            if not agent:
+                self.logger.error(f"Unknown agent: {agent_name}")
+                break
+
+            # Continue the agent's work
+            continuation_context = TaskContext(
+                project_path=self.project_path, metadata=enhanced_context
+            )
+            continuation_result = await agent.execute(
+                continuation_prompt, continuation_context
+            )
+
+            if continuation_result.success:
+                # Parse and execute continuation code
+                continuation_output = str(continuation_result.output)
+                if continuation_output:
+                    await self._parse_and_execute_code(continuation_output)
+                    last_successful_output = (
+                        continuation_output  # Update for next iteration
+                    )
+
+                # Update memory with continuation results
+                self.shared_memory.update_memory(
+                    f"{agent_name}_continuation_{continuation_count}",
+                    continuation_result.output,
+                    enhanced_context,
+                )
+            else:
+                self.logger.error(
+                    f"{agent_name} continuation {continuation_count} failed: {continuation_result.error_message}"
+                )
+                break
+
+        if continuation_count >= max_continuations:
+            self.logger.error(
+                f"{agent_name} failed to complete work after {max_continuations} attempts"
+            )
+            return ExecutionResult(
+                success=False,
+                error_message=f"Agent {agent_name} could not complete work after {max_continuations} attempts",
+                agent_name=agent_name,
+                task_id="ensure_completion",
+            )
+
+        # Return the original result (now with completed work)
+        return agent_result
+
+    async def resume_incomplete_agent_work(
+        self, agent_name: str, incomplete_work: dict
+    ) -> ExecutionResult:
+        """
+        Resume incomplete agent work using the continuation mechanism.
+        This method implements the core continuation functionality.
+        """
+        self.logger.info(f"Resuming incomplete work for agent: {agent_name}")
+
+        # Get enhanced context from shared memory
+        enhanced_context = self.shared_memory.get_context_for_agent(agent_name)
+
+        # Create continuation prompt
+        continuation_prompt = self.task_continuation.create_continuation_prompt(
+            agent_name, incomplete_work
+        )
+
+        # Get the appropriate agent
+        agent_mapping = {
+            "architect": self.architect,
+            "developer": self.developer,
+            "ui_designer": self.ui_designer,
+            "tester": self.tester,
+        }
+
+        agent = agent_mapping.get(agent_name)
+        if not agent:
+            return ExecutionResult(
+                success=False,
+                error_message=f"Unknown agent: {agent_name}",
+                agent_name=agent_name,
+                task_id="resume_work",
+            )
+
+        # Create task context for continuation
+        continuation_context = TaskContext(
+            project_path=self.project_path, metadata=enhanced_context
+        )
+
+        try:
+            # Execute continuation task
+            continuation_result = await agent.execute(
+                continuation_prompt, continuation_context
+            )
+
+            if continuation_result.success:
+                # Parse and execute any code blocks
+                output_text = str(continuation_result.output)
+                if output_text:
+                    await self._parse_and_execute_code(output_text)
+
+                # Update shared memory with continuation results
+                self.shared_memory.update_memory(
+                    f"{agent_name}_continuation",
+                    continuation_result.output,
+                    enhanced_context,
+                )
+
+                self.logger.info(f"Successfully resumed work for agent: {agent_name}")
+                return continuation_result
+            else:
+                self.logger.error(
+                    f"Failed to resume work for agent {agent_name}: {continuation_result.error_message}"
+                )
+                return continuation_result
+
+        except Exception as e:
+            self.logger.error(
+                f"Exception during agent resumption for {agent_name}: {str(e)}"
+            )
+            return ExecutionResult(
+                success=False,
+                error_message=f"Exception during resumption: {str(e)}",
+                agent_name=agent_name,
+                task_id="resume_work",
+            )
 
     def _ensure_logging_active(self):
         """Ensure that logging is properly configured and active"""
