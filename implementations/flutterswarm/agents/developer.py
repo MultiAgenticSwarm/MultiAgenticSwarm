@@ -18,6 +18,9 @@ from implementations.agentswarm.core.types import (
     TaskContext,
 )
 
+# Import directly from MAS utils for logging
+from multiagenticswarm.utils.logger import get_logger
+
 # Import tools
 from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
 
@@ -74,7 +77,7 @@ class FlutterDeveloperAgent(AbstractDeveloperAgent):
             },
         )
 
-        self.logger = mas.get_logger(f"flutterswarm.{name}")
+        self.logger = get_logger(f"flutterswarm.{name}")
         self.logger.info(f"Initialized FlutterDeveloperAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
@@ -238,7 +241,7 @@ COMPLETE IMPLEMENTATION CHECKLIST:
 6. Test that every file is complete and syntactically correct
 7. Verify responsive design principles are applied
 
-IMPORTANT: 
+IMPORTANT:
 - ALWAYS put file_system calls inside ```python code blocks
 - ALWAYS provide the COMPLETE file content, not snippets
 - ALWAYS create directories before creating files in them
@@ -377,18 +380,18 @@ IMPORTANT:
         # Simplified prompt focused on the agent's expertise
         implementation_prompt = f"""
         Based on the provided context and requirements, implement the following Flutter feature:
-        
+
         Feature: {feature_description}
-        
+
         Project context: {project_context.__dict__ if project_context else 'None'}
-        
+
         Please use your Flutter expertise to create a complete implementation including:
         1. All necessary files and directories
         2. Complete, compilable Dart code
         3. Proper state management
         4. Responsive UI design
         5. Required dependencies in pubspec.yaml
-        
+
         Use the file_system tool to create all files with complete content.
         """
 

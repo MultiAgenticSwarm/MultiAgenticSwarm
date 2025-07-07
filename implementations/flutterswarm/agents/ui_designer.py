@@ -14,6 +14,9 @@ from implementations.agentswarm.agents import (  # UI Designer extends Developer
 )
 from implementations.agentswarm.core.types import ExecutionResult, TaskContext
 
+# Import directly from MAS utils for logging
+from multiagenticswarm.utils.logger import get_logger
+
 from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
 
 
@@ -71,7 +74,7 @@ class FlutterUIDesignerAgent(AbstractDeveloperAgent):
             },
         )
 
-        self.logger = mas.get_logger(f"flutterswarm.{name}")
+        self.logger = get_logger(f"flutterswarm.{name}")
         self.logger.info(f"Initialized FlutterUIDesignerAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
@@ -238,7 +241,7 @@ COMPLETE IMPLEMENTATION CHECKLIST:
 9. Validate theme consistency across all widgets
 10. Test animations and interactions work properly
 
-IMPORTANT: 
+IMPORTANT:
 - ALWAYS put file_system calls inside ```python code blocks
 - ALWAYS provide the COMPLETE file content, not snippets
 - ALWAYS create directories before creating files in them

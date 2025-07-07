@@ -12,6 +12,9 @@ import multiagenticswarm as mas
 from implementations.agentswarm.agents import AbstractTesterAgent
 from implementations.agentswarm.core.types import ExecutionResult, TaskContext
 
+# Import directly from MAS utils for logging
+from multiagenticswarm.utils.logger import get_logger
+
 from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
 
 
@@ -60,7 +63,7 @@ class FlutterTesterAgent(AbstractTesterAgent):
             },
         )
 
-        self.logger = mas.get_logger(f"flutterswarm.{name}")
+        self.logger = get_logger(f"flutterswarm.{name}")
         self.logger.info(f"Initialized FlutterTesterAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
@@ -145,7 +148,7 @@ ACCESSIBILITY TESTING:
 
 ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-You are a Flutter testing specialist responsible for creating COMPLETE, WORKING test files that can be executed immediately. 
+You are a Flutter testing specialist responsible for creating COMPLETE, WORKING test files that can be executed immediately.
 
 CRITICAL FILE CREATION REQUIREMENTS:
 
@@ -163,44 +166,44 @@ CRITICAL FILE CREATION REQUIREMENTS:
    file_system(operation='mkdir', path='test/integration')
    file_system(operation='mkdir', path='test/mocks')
    file_system(operation='mkdir', path='test/fixtures')
-   
+
    # Create complete test file
    file_system(operation='write', path='test/unit/user_service_test.dart', content='''
    import 'package:flutter_test/flutter_test.dart';
    import 'package:mockito/mockito.dart';
    import 'package:mockito/annotations.dart';
    import 'package:your_app/services/user_service.dart';
-   
+
    import 'user_service_test.mocks.dart';
-   
+
    @GenerateMocks([UserRepository])
    void main() {
      group('UserService', () {
        late UserService userService;
        late MockUserRepository mockRepository;
-       
+
        setUp(() {
          mockRepository = MockUserRepository();
          userService = UserService(mockRepository);
        });
-       
+
        test('should fetch user successfully', () async {
          // Arrange
          final user = User(id: '1', name: 'Test User');
          when(mockRepository.getUser('1')).thenAnswer((_) async => user);
-         
+
          // Act
          final result = await userService.getUser('1');
-         
+
          // Assert
          expect(result, equals(user));
          verify(mockRepository.getUser('1')).called(1);
        });
-       
+
        test('should handle user not found', () async {
          // Arrange
          when(mockRepository.getUser('1')).thenThrow(UserNotFoundException());
-         
+
          // Act & Assert
          expect(() => userService.getUser('1'), throwsA(isA<UserNotFoundException>()));
        });
@@ -242,15 +245,15 @@ EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
    import 'package:your_app/screens/home_screen.dart';
    import 'package:your_app/providers/auth_provider.dart';
    import 'package:your_app/providers/data_provider.dart';
-   
+
    import '../mocks/mock_providers.dart';
-   
+
    void main() {
      testWidgets('HomeScreen displays user data correctly', (WidgetTester tester) async {
        // Create mock providers
        final mockAuthProvider = MockAuthProvider();
        final mockDataProvider = MockDataProvider();
-       
+
        // Set up mock behavior
        when(mockAuthProvider.currentUser).thenReturn(
          User(id: '1', name: 'Test User', email: 'test@example.com')
@@ -258,7 +261,7 @@ EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
        when(mockDataProvider.getUserData('1')).thenAnswer(
          (_) async => UserData(posts: 5, followers: 100, following: 50)
        );
-       
+
        // Build widget with providers
        await tester.pumpWidget(
          MultiProvider(
@@ -269,21 +272,21 @@ EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
            child: MaterialApp(home: HomeScreen()),
          ),
        );
-       
+
        // Wait for async operations
        await tester.pumpAndSettle();
-       
+
        // Verify UI elements
        expect(find.text('Test User'), findsOneWidget);
        expect(find.text('test@example.com'), findsOneWidget);
        expect(find.text('5 Posts'), findsOneWidget);
        expect(find.text('100 Followers'), findsOneWidget);
        expect(find.text('50 Following'), findsOneWidget);
-       
+
        // Verify interactions
        await tester.tap(find.byIcon(Icons.refresh));
        await tester.pumpAndSettle();
-       
+
        verify(mockDataProvider.refreshUserData('1')).called(1);
      });
    }
@@ -298,10 +301,10 @@ EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
    import 'package:your_app/providers/data_provider.dart';
    import 'package:your_app/models/user.dart';
    import 'package:your_app/models/user_data.dart';
-   
+
    class MockAuthProvider extends Mock implements AuthProvider {}
    class MockDataProvider extends Mock implements DataProvider {}
-   
+
    class TestDataFactory {
      static User createTestUser({
        String id = '1',
@@ -310,7 +313,7 @@ EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
      }) {
        return User(id: id, name: name, email: email);
      }
-     
+
      static UserData createTestUserData({
        int posts = 5,
        int followers = 100,
@@ -334,57 +337,57 @@ EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
    import 'package:integration_test/integration_test.dart';
    import 'package:your_app/main.dart' as app;
    import 'package:your_app/services/api_service.dart';
-   
+
    void main() {
      IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-     
+
      group('User Authentication Flow', () {
        testWidgets('complete login and navigation flow', (WidgetTester tester) async {
          // Start the app
          app.main();
          await tester.pumpAndSettle();
-         
+
          // Verify login screen is shown
          expect(find.text('Login'), findsOneWidget);
          expect(find.byType(TextField), findsNWidgets(2));
-         
+
          // Enter credentials
          await tester.enterText(find.byKey(Key('email_field')), 'test@example.com');
          await tester.enterText(find.byKey(Key('password_field')), 'password123');
-         
+
          // Tap login button
          await tester.tap(find.byKey(Key('login_button')));
          await tester.pumpAndSettle();
-         
+
          // Verify navigation to home screen
          expect(find.text('Welcome'), findsOneWidget);
          expect(find.byType(BottomNavigationBar), findsOneWidget);
-         
+
          // Test navigation between tabs
          await tester.tap(find.byIcon(Icons.person));
          await tester.pumpAndSettle();
          expect(find.text('Profile'), findsOneWidget);
-         
+
          // Test logout
          await tester.tap(find.byKey(Key('logout_button')));
          await tester.pumpAndSettle();
-         
+
          // Verify return to login screen
          expect(find.text('Login'), findsOneWidget);
        });
-       
+
        testWidgets('handle invalid credentials', (WidgetTester tester) async {
          app.main();
          await tester.pumpAndSettle();
-         
+
          // Enter invalid credentials
          await tester.enterText(find.byKey(Key('email_field')), 'invalid@example.com');
          await tester.enterText(find.byKey(Key('password_field')), 'wrongpassword');
-         
+
          // Tap login button
          await tester.tap(find.byKey(Key('login_button')));
          await tester.pumpAndSettle();
-         
+
          // Verify error message
          expect(find.text('Invalid credentials'), findsOneWidget);
          expect(find.text('Login'), findsOneWidget); // Still on login screen
@@ -445,7 +448,7 @@ Before considering a test implementation complete, verify:
 
 ✅ DIRECTORY STRUCTURE:
 - test/unit/ for unit tests
-- test/widget/ for widget tests  
+- test/widget/ for widget tests
 - test/integration/ for integration tests
 - test/mocks/ for mock implementations
 - test/fixtures/ for test data

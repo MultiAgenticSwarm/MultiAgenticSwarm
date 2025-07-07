@@ -12,6 +12,9 @@ import multiagenticswarm as mas
 from implementations.agentswarm.agents import AbstractArchitectAgent
 from implementations.agentswarm.core.types import ExecutionResult, TaskContext
 
+# Import directly from MAS utils for logging
+from multiagenticswarm.utils.logger import get_logger
+
 from ..tools import DartCLITool, FileSystemTool, FlutterCLITool
 
 
@@ -60,7 +63,7 @@ class FlutterArchitectAgent(AbstractArchitectAgent):
             },
         )
 
-        self.logger = mas.get_logger(f"flutterswarm.{name}")
+        self.logger = get_logger(f"flutterswarm.{name}")
         self.logger.info(f"Initialized FlutterArchitectAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
@@ -220,14 +223,10 @@ CRITICAL FILE COMPLETION REQUIREMENTS:
 - Include ALL necessary imports at the top of each file
 
 PROJECT STRUCTURE REQUIREMENTS:
-- Create complete directory structure first: lib/, lib/screens/, lib/widgets/, lib/models/, lib/services/, lib/utils/, lib/constants/
-- Establish proper file organization following Flutter conventions
-- Set up testing directories: test/, test/unit/, test/widget/, test/integration/
-- Create documentation directories: docs/, docs/architecture/, docs/api/
-
-ARCHITECTURAL FOUNDATION REQUIREMENTS:
+- Create complete project directory structure
+- Create comprehensive pubspec.yaml with ALL architectural dependencies
 - Create main.dart with proper app initialization
-- Set up app.dart for application-level configuration
+- Create app.dart for application-level configuration
 - Create router.dart for navigation architecture
 - Set up dependency injection container
 - Create base classes and abstract interfaces
@@ -255,7 +254,7 @@ COMPLETE IMPLEMENTATION CHECKLIST FOR ARCHITECTURE:
 11. Set up testing infrastructure
 12. Create documentation structure
 
-IMPORTANT: 
+IMPORTANT:
 - ALWAYS put file_system calls inside ```python code blocks
 - ALWAYS provide the COMPLETE file content, not snippets
 - ALWAYS create directories before creating files in them
@@ -580,9 +579,9 @@ IMPORTANT:
         """Create the foundational project structure and architecture setup"""
         task = f"""
         Create complete Flutter project foundation for: {project_name}
-        
+
         Requirements: {requirements}
-        
+
         MANDATORY ARCHITECT RESPONSIBILITIES:
         1. Create complete directory structure (lib/, test/, docs/, etc.)
         2. Create comprehensive pubspec.yaml with ALL necessary dependencies
@@ -596,7 +595,7 @@ IMPORTANT:
         10. Create error handling and logging setup
         11. Set up testing infrastructure
         12. Create documentation structure
-        
+
         ARCHITECTURAL DEPENDENCIES TO INCLUDE:
         - State management (provider, riverpod, bloc, etc.)
         - Navigation (go_router, etc.)
@@ -605,7 +604,7 @@ IMPORTANT:
         - Dependency injection (get_it, provider, etc.)
         - Development tools (flutter_test, mockito, etc.)
         - Code generation (json_annotation, build_runner, etc.)
-        
+
         FOUNDATION FILES TO CREATE:
         - pubspec.yaml (comprehensive dependencies)
         - main.dart (app entry point)
@@ -618,7 +617,7 @@ IMPORTANT:
         - lib/core/logger.dart (logging setup)
         - Base classes for screens, widgets, services
         - Testing setup files
-        
+
         CRITICAL REQUIREMENTS:
         - Use file_system tool to create ALL files and directories
         - Provide COMPLETE file content, not snippets
@@ -640,7 +639,7 @@ IMPORTANT:
         """Create base classes and abstract interfaces for the architecture"""
         task = f"""
         Create base classes and abstract interfaces for Flutter architecture: {architecture_design}
-        
+
         MANDATORY BASE CLASSES TO CREATE:
         1. Base Screen/Page classes
         2. Base Widget classes
@@ -652,7 +651,7 @@ IMPORTANT:
         8. Base Error classes
         9. Base Logger interfaces
         10. Base Configuration classes
-        
+
         SPECIFIC BASE FILES TO CREATE:
         - lib/core/base/base_screen.dart (base screen class)
         - lib/core/base/base_widget.dart (base widget class)
@@ -664,7 +663,7 @@ IMPORTANT:
         - lib/core/base/base_error.dart (base error classes)
         - lib/core/base/base_logger.dart (base logger interface)
         - lib/core/base/base_config.dart (base configuration)
-        
+
         ARCHITECTURAL PATTERNS TO IMPLEMENT:
         - Repository pattern interfaces
         - Service layer interfaces
@@ -673,7 +672,7 @@ IMPORTANT:
         - Strategy pattern for different implementations
         - Singleton pattern for shared resources
         - Dependency injection interfaces
-        
+
         CRITICAL REQUIREMENTS:
         - Use file_system tool to create ALL files
         - Create lib/core/base/ directory structure

@@ -52,7 +52,11 @@ class BaseAgent(mas.Agent if MAS_AVAILABLE else ABC):
 
         self.role = role if isinstance(role, AgentRole) else AgentRole(role)
         self.mas_system = system or mas.System()
-        self.logger = mas.get_logger(f"agentswarm.{name}")
+
+        # Use direct import for logger
+        from multiagenticswarm.utils.logger import get_logger
+
+        self.logger = get_logger(f"agentswarm.{name}")
 
         # Build specialized system prompt
         system_prompt = self._build_instructions()
@@ -468,7 +472,11 @@ class BaseSwarm(mas.System if MAS_AVAILABLE else ABC):
         self.project_path = project_path
         self.llm_provider = llm_provider
         self.llm_model = llm_model
-        self.logger = mas.get_logger(f"agentswarm.{name}")
+
+        # Use direct import for the logger
+        from multiagenticswarm.utils.logger import get_logger
+
+        self.logger = get_logger(f"agentswarm.{name}")
 
         # Initialize MAS System
         super().__init__(config_path=None, enable_logging=True, verbose=True)

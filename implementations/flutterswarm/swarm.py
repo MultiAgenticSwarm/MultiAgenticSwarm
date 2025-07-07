@@ -1,13 +1,47 @@
 """
 FlutterSwarm - Orchestrates LLM-powered Flutter development.
 Uses MultiAgenticSwarm SDK for all infrastructure.
+
+This implementation ensures comprehensive logging of all operations for
+universal coverage across all swarms (FlutterSwarm, PythonSwarm, etc.).
 """
 
 import logging
+import os
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 # Import MultiAgenticSwarm as the core SDK
 import multiagenticswarm as mas
+
+
+# Define our own decorator for comprehensive logging
+def comprehensive_async_log_decorator(logger_name):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            # Use MAS logger directly from utils
+            from multiagenticswarm.utils.logger import get_logger
+
+            logger = get_logger(logger_name)
+            logger.info(f"Starting {func.__name__}")
+            start_time = __import__("time").time()
+            try:
+                result = await func(*args, **kwargs)
+                duration = __import__("time").time() - start_time
+                logger.info(f"Completed {func.__name__} in {duration:.2f}s")
+                return result
+            except Exception as e:
+                logger.error(f"Error in {func.__name__}: {e}")
+                raise
+
+        return wrapper
+
+    return decorator
+
+
+# Add it to the mas module if it doesn't exist
+if not hasattr(mas, "comprehensive_async_log_decorator"):
+    mas.comprehensive_async_log_decorator = comprehensive_async_log_decorator
 
 # Import AgentSwarm base classes
 from implementations.agentswarm.core import BaseSwarm, ExecutionResult, TaskContext
@@ -44,8 +78,35 @@ class FlutterSwarm(BaseSwarm):
         llm_provider: str = "openai",
         llm_model: str = "gpt-4",
         temperature: float = 0.7,
+        enable_comprehensive_logging: bool = True,
+        verbose_logging: bool = False,
         **kwargs,
     ):
+        # Auto-initialize comprehensive logging for universal coverage
+        if enable_comprehensive_logging:
+            from multiagenticswarm.logging import setup_logging
+
+            log_config = setup_logging(
+                verbose=verbose_logging,
+                log_directory=kwargs.get(
+                    "log_directory",
+                    os.path.join(
+                        os.path.dirname(os.path.abspath(project_path)), "logs"
+                    ),
+                ),
+                enable_json_logs=True,
+            )
+
+            # Import MAS logging module
+            import multiagenticswarm.logging as mas_logging
+
+            print(f"🔍 FlutterSwarm: Comprehensive logging initialized")
+            print(f"📁 Log directory: {log_config.get('log_directory', 'None')}")
+            print(f"🆔 Session ID: {log_config.get('session_id', 'None')}")
+
+            # Store the logging configuration for future reference
+            self.log_config = log_config
+
         # Initialize using BaseSwarm (which inherits from MAS System)
         super().__init__(
             name="FlutterSwarm",
@@ -56,12 +117,38 @@ class FlutterSwarm(BaseSwarm):
             **kwargs,
         )
 
-        self.logger = mas.get_logger("flutterswarm")
-        self.logger.info(f"Initialized FlutterSwarm at {project_path}")
+        # Setup detailed logging for the swarm
+        from multiagenticswarm.utils.logger import get_logger
+
+        self.logger = get_logger("flutterswarm")
+        self.logger.info(f"FlutterSwarm initialized with project path: {project_path}")
+        self.logger.info(f"Using LLM provider: {llm_provider}, model: {llm_model}")
+
+        # Register additional log handlers for comprehensive logging
+        if hasattr(mas, "logging"):
+            mas.logging.log_info(
+                f"FlutterSwarm initialized with project path: {project_path}",
+                component="flutterswarm",
+                operation="initialization",
+            )
+        self.logger.log_swarm_operation(
+            "FlutterSwarm",
+            "initialization",
+            {
+                "project_path": project_path,
+                "llm_provider": llm_provider,
+                "llm_model": llm_model,
+            },
+        )
+
         self._setup_tools()
         self._setup_agents()
         self._setup_workflows()  # Ensure workflows are registered
         self._validate_tools()
+
+        self.logger.log_swarm_operation(
+            "FlutterSwarm", "initialization", status="completed"
+        )
 
         # Note: Flutter SDK and project initialization should be handled by the calling script
         # to avoid blocking asyncio.run() calls in the constructor which would fail when
@@ -317,6 +404,7 @@ class FlutterSwarm(BaseSwarm):
         self.logger.info(f"Context gathered: {context}")
         return context
 
+    @comprehensive_async_log_decorator("flutterswarm.create_app")
     async def create_app(
         self,
         app_description: str,
@@ -329,9 +417,37 @@ class FlutterSwarm(BaseSwarm):
         Create a complete Flutter application using LLM-powered agents.
         All Flutter knowledge and decisions come from LLMs.
         Central orchestrator that manually iterates through agents.
+        Comprehensive logging captures all operations, LLM interactions, and file operations.
         """
 
-        self.logger.info(f"Creating Flutter app: {app_description}")
+        # Ensure logging is properly set up
+        self._ensure_logging_active()
+
+        # Log the start of app creation with comprehensive details
+        operation_data = {
+            "app_description": app_description,
+            "features": features,
+            "platforms": platforms,
+            "design_requirements": design_requirements or {},
+            "performance_requirements": performance_requirements or {},
+            "project_path": self.project_path,
+            "session_id": getattr(self, "log_config", {}).get("session_id", "unknown"),
+        }
+
+        # Log using the standard logger
+        self.logger.info(
+            f"Starting Flutter app creation: {len(features)} features for platforms {platforms}"
+        )
+
+        # Log with comprehensive logging
+        import multiagenticswarm.logging as mas_logging
+
+        mas_logging.log_info(
+            f"Starting Flutter app creation: {len(features)} features for platforms {platforms}",
+            component="flutterswarm",
+            operation="create_app",
+            metadata=operation_data,
+        )
 
         # Create comprehensive task context
         context = {
@@ -358,7 +474,42 @@ class FlutterSwarm(BaseSwarm):
 
         try:
             # Step 1: Architect - Design system architecture
-            self.logger.info("Step 1: Architect analyzing requirements...")
+            # Log the step with comprehensive details
+            step_info = {
+                "step": "architect_design",
+                "step_number": 1,
+                "agent": "flutter_architect",
+                "inputs": {
+                    "app_description": app_description,
+                    "features": features,
+                    "platforms": platforms,
+                    "design_requirements": design_requirements,
+                    "performance_requirements": performance_requirements,
+                },
+            }
+
+            # Log using standard logger
+            self.logger.log_workflow_step(
+                "create_flutter_app",
+                "architect_design",
+                1,
+                "flutter_architect",
+                "started",
+            )
+
+            # Log with enhanced MAS logging system
+            try:
+                import multiagenticswarm.logging as mas_logging
+
+                mas_logging.log_info(
+                    f"Starting architecture design with flutter_architect",
+                    component="flutterswarm.workflow",
+                    operation="architect_design",
+                    metadata=step_info,
+                )
+            except (ImportError, AttributeError):
+                pass
+
             architect_context = TaskContext(
                 project_path=self.project_path, metadata=context
             )
@@ -372,6 +523,17 @@ class FlutterSwarm(BaseSwarm):
             }
             architect_result = await self.architect.design_architecture(
                 requirements_analysis=requirements_analysis, context=architect_context
+            )
+
+            # Log detailed architect results
+            self.logger.log_workflow_step(
+                "create_flutter_app",
+                "architect_design",
+                1,
+                "flutter_architect",
+                "completed" if architect_result.success else "failed",
+                input_data=requirements_analysis,
+                output_data=architect_result.output,
             )
 
             # Execute architect's code immediately
@@ -407,13 +569,26 @@ class FlutterSwarm(BaseSwarm):
                 )
 
             # Step 2: UI Designer - Create UI designs
-            self.logger.info("Step 2: UI Designer creating interface...")
+            self.logger.log_workflow_step(
+                "create_flutter_app", "ui_design", 2, "flutter_ui_designer", "started"
+            )
             ui_designer_context = TaskContext(
                 project_path=self.project_path,
                 metadata={**context, "architecture_design": architect_result.output},
             )
             ui_designer_result = await self.ui_designer.design_ui(
                 context=ui_designer_context
+            )
+
+            # Log detailed UI designer results
+            self.logger.log_workflow_step(
+                "create_flutter_app",
+                "ui_design",
+                2,
+                "flutter_ui_designer",
+                "completed" if ui_designer_result.success else "failed",
+                input_data=ui_designer_context.metadata,
+                output_data=ui_designer_result.output,
             )
 
             # Execute UI designer's code immediately
@@ -451,7 +626,13 @@ class FlutterSwarm(BaseSwarm):
                 )
 
             # Step 3: Developer - Implement features
-            self.logger.info("Step 3: Developer implementing features...")
+            self.logger.log_workflow_step(
+                "create_flutter_app",
+                "feature_implementation",
+                3,
+                "flutter_developer",
+                "started",
+            )
             developer_context = TaskContext(
                 project_path=self.project_path,
                 metadata={**context, "ui_design": ui_designer_result.output},
@@ -459,6 +640,17 @@ class FlutterSwarm(BaseSwarm):
             developer_result = await self.developer.implement_feature(
                 feature_description=f"Implement all features: {', '.join(features)}",
                 project_context=developer_context,
+            )
+
+            # Log detailed developer results
+            self.logger.log_workflow_step(
+                "create_flutter_app",
+                "feature_implementation",
+                3,
+                "flutter_developer",
+                "completed" if developer_result.success else "failed",
+                input_data=f"Implement all features: {', '.join(features)}",
+                output_data=developer_result.output,
             )
 
             # Execute developer's code immediately
@@ -1335,3 +1527,25 @@ class FlutterSwarm(BaseSwarm):
             else:
                 context[action] = result
         return result
+
+    def _ensure_logging_active(self):
+        """Ensure that logging is properly configured and active"""
+        # Use MultiAgenticSwarm logging
+        import multiagenticswarm.logging as mas_logging
+
+        # Ensure log directory exists
+        log_dir = getattr(
+            self, "log_directory", os.path.join(self.project_path, "../logs")
+        )
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Initialize logging if not already done
+        log_config = mas_logging.setup_logging(
+            verbose=True, log_directory=log_dir, enable_json_logs=True
+        )
+
+        # Store the logging configuration
+        self.log_config = log_config
+        self.logger.info(f"Logging initialized: {log_config}")
+
+        return True

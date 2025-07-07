@@ -2,27 +2,52 @@
 Flutter CLI wrapper - ONLY executes commands, contains ZERO Flutter logic.
 All decisions about WHAT commands to run come from LLMs.
 """
-import os
-import subprocess
-import logging
-from typing import Dict, Any, List, Optional, Union
-import shutil
 import asyncio
-import psutil
-import time
 import json
+import logging
+import os
 import re
+import shutil
+import subprocess
+import time
+from typing import Any, Dict, List, Optional, Union
+
+import psutil
 
 try:
     import multiagenticswarm as mas
     from multiagenticswarm.core.base_tool import FunctionTool
+
     MAS_AVAILABLE = True
+
+    # Use MAS logger for comprehensive logging
+    from multiagenticswarm.utils.logger import get_logger
+
+    def comprehensive_async_log_decorator(name):
+        # Simple decorator that logs basic info
+        def decorator(func):
+            async def wrapper(*args, **kwargs):
+                start_time = time.time()
+                logger = get_logger(name)
+                logger.info(f"Starting {func.__name__}")
+                try:
+                    result = await func(*args, **kwargs)
+                    duration = time.time() - start_time
+                    logger.info(f"Completed {func.__name__} in {duration:.2f}s")
+                    return result
+                except Exception as e:
+                    logger.error(f"Error in {func.__name__}: {e}")
+                    raise
+
+            return wrapper
+
+        return decorator
+
 except ImportError:
     MAS_AVAILABLE = False
     mas = None
-    FunctionTool = None
-    mas = None
-    FunctionTool = None
+    # MAS is required for FlutterSwarm
+    raise ImportError("MultiAgenticSwarm is required for FlutterSwarm")
 
 
 class FlutterCLITool:
@@ -35,10 +60,22 @@ class FlutterCLITool:
         self.working_directory = os.path.abspath(working_directory)
         self.name = name
         self.description = "Execute Flutter CLI commands with robust error handling"
-        self.logger = mas.get_logger(f"flutterswarm.{name}") if MAS_AVAILABLE else logging.getLogger(f"flutterswarm.{name}")
+
+        # Initialize comprehensive logging using direct import
+        from multiagenticswarm.utils.logger import get_logger
+
+        self.logger = get_logger(f"flutterswarm.tools.{name}")
 
         # Ensure working directory exists
         os.makedirs(self.working_directory, exist_ok=True)
+
+        self.logger.log_tool_call_detailed(
+            tool_name=self.name,
+            agent_name="system",
+            command="initialize",
+            parameters={"working_directory": self.working_directory},
+            success=True,
+        )
 
         # Note: Flutter SDK verification should be done asynchronously, not in constructor
         # Call verify_flutter_sdk() separately when needed to avoid blocking initialization
@@ -54,7 +91,9 @@ class FlutterCLITool:
         try:
             # Check if flutter command exists
             if not shutil.which("flutter"):
-                raise RuntimeError("Flutter SDK not found in PATH. Please install Flutter and add it to PATH.")
+                raise RuntimeError(
+                    "Flutter SDK not found in PATH. Please install Flutter and add it to PATH."
+                )
 
             # Check Flutter version
             result = subprocess.run(
@@ -62,13 +101,17 @@ class FlutterCLITool:
                 capture_output=True,
                 text=True,
                 timeout=30,
-                cwd=self.working_directory
+                cwd=self.working_directory,
             )
 
             if result.returncode != 0:
                 raise RuntimeError(f"Flutter SDK error: {result.stderr}")
 
-            version_info = result.stdout.strip().split('\n')[0] if result.stdout else "Unknown version"
+            version_info = (
+                result.stdout.strip().split("\n")[0]
+                if result.stdout
+                else "Unknown version"
+            )
             self.logger.info(f"Flutter SDK verified: {version_info}")
 
         except subprocess.TimeoutExpired:
@@ -77,33 +120,119 @@ class FlutterCLITool:
             self.logger.error(f"Flutter SDK verification failed: {e}")
             raise
 
-    async def execute(self, command: str, args: Optional[List[str]] = None, timeout: int = 120) -> Dict[str, Any]:
+    @comprehensive_async_log_decorator("flutterswarm.tools.flutter_cli.execute")
+    async def execute(
+        self, command: str, args: Optional[List[str]] = None, timeout: int = 120
+    ) -> Dict[str, Any]:
         """Execute a Flutter CLI command asynchronously with error handling."""
+        start_time = time.time()
         cmd = ["flutter"] + command.split()
         if args:
             cmd += args
+
+        # Build full command for logging
+        full_command = " ".join(cmd)
+
+        # Log using both traditional logger and MAS enhanced logging
+        self.logger.info(f"Executing Flutter command: {full_command}")
+
+        # Use enhanced MAS logging if available
+        try:
+            import multiagenticswarm.logging as mas_logging
+
+            mas_logging.log_info(
+                f"Executing Flutter CLI command: {full_command}",
+                component="flutterswarm.tools.flutter_cli",
+                operation="execute",
+                metadata={
+                    "command": command,
+                    "args": args,
+                    "full_command": full_command,
+                },
+            )
+        except (ImportError, AttributeError):
+            pass
+
+        # Log the command execution with detailed tracking
+        self.logger.log_tool_call_detailed(
+            tool_name=self.name,
+            agent_name="system",
+            command=" ".join(cmd),
+            parameters={"timeout": timeout, "cwd": self.working_directory},
+        )
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=self.working_directory,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             try:
-                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=timeout
+                )
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
-                return {"success": False, "error": "Flutter command timed out."}
+                execution_time = time.time() - start_time
+                result = {"success": False, "error": "Flutter command timed out."}
+
+                # Log timeout
+                self.logger.log_tool_call_detailed(
+                    tool_name=self.name,
+                    agent_name="system",
+                    command=" ".join(cmd),
+                    result=result,
+                    execution_time=execution_time,
+                    success=False,
+                )
+                return result
             output = stdout.decode()
             error = stderr.decode()
+            execution_time = time.time() - start_time
+
             if proc.returncode != 0:
                 parsed_error = self._parse_flutter_error(error)
-                return {"success": False, "output": output, "error": parsed_error}
-            return {"success": True, "output": output}
+                result = {"success": False, "output": output, "error": parsed_error}
+
+                # Log failed execution
+                self.logger.log_tool_call_detailed(
+                    tool_name=self.name,
+                    agent_name="system",
+                    command=" ".join(cmd),
+                    result=result,
+                    execution_time=execution_time,
+                    success=False,
+                )
+                return result
+
+            result = {"success": True, "output": output}
+
+            # Log successful execution
+            self.logger.log_tool_call_detailed(
+                tool_name=self.name,
+                agent_name="system",
+                command=" ".join(cmd),
+                result=result,
+                execution_time=execution_time,
+                success=True,
+            )
+            return result
+
         except Exception as e:
-            self.logger.error(f"Flutter CLI execution failed: {e}")
-            return {"success": False, "error": str(e)}
+            execution_time = time.time() - start_time
+            result = {"success": False, "error": str(e)}
+
+            # Log exception
+            self.logger.log_tool_call_detailed(
+                tool_name=self.name,
+                agent_name="system",
+                command=" ".join(cmd),
+                result=result,
+                execution_time=execution_time,
+                success=False,
+            )
+            return result
 
     def _parse_flutter_error(self, error_output: str) -> str:
         # Simple error parsing for actionable feedback
@@ -129,7 +258,10 @@ class FlutterCLITool:
         """Check Flutter doctor status with caching"""
         current_time = time.time()
 
-        if self._doctor_cache and (current_time - self._cache_time) < self._cache_duration:
+        if (
+            self._doctor_cache
+            and (current_time - self._cache_time) < self._cache_duration
+        ):
             return self._doctor_cache
 
         try:
@@ -138,7 +270,7 @@ class FlutterCLITool:
                 capture_output=True,
                 text=True,
                 timeout=60,
-                cwd=self.working_directory
+                cwd=self.working_directory,
             )
 
             if result.returncode == 0:
@@ -147,19 +279,24 @@ class FlutterCLITool:
                     self._doctor_cache = {
                         "success": True,
                         "data": doctor_data,
-                        "issues": [item for item in doctor_data if item.get("statusInfo") == "partial" or item.get("statusInfo") == "notAvailable"]
+                        "issues": [
+                            item
+                            for item in doctor_data
+                            if item.get("statusInfo") == "partial"
+                            or item.get("statusInfo") == "notAvailable"
+                        ],
                     }
                 except json.JSONDecodeError:
                     self._doctor_cache = {
                         "success": False,
                         "error": "Failed to parse doctor output",
-                        "issues": ["Flutter doctor output parsing failed"]
+                        "issues": ["Flutter doctor output parsing failed"],
                     }
             else:
                 self._doctor_cache = {
                     "success": False,
                     "error": result.stderr,
-                    "issues": ["Flutter doctor check failed"]
+                    "issues": ["Flutter doctor check failed"],
                 }
 
             self._cache_time = current_time
@@ -169,14 +306,14 @@ class FlutterCLITool:
             self._doctor_cache = {
                 "success": False,
                 "error": str(e),
-                "issues": ["Flutter doctor check failed"]
+                "issues": ["Flutter doctor check failed"],
             }
             return self._doctor_cache
 
     def _validate_project_name(self, project_name: str) -> bool:
         """Validate Flutter project name"""
         # Flutter project names must follow Dart package naming conventions
-        pattern = r'^[a-z][a-z0-9_]*[a-z0-9]$'
+        pattern = r"^[a-z][a-z0-9_]*[a-z0-9]$"
         return bool(re.match(pattern, project_name)) and len(project_name) >= 2
 
     async def create_project(
@@ -185,7 +322,7 @@ class FlutterCLITool:
         template: str = None,
         org: str = None,
         platforms: List[str] = None,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """Create a new Flutter project with validation"""
 
@@ -194,7 +331,7 @@ class FlutterCLITool:
             return {
                 "success": False,
                 "error": "Invalid project name",
-                "suggestion": "Use lowercase letters, numbers, and underscores only (e.g., 'my_app')"
+                "suggestion": "Use lowercase letters, numbers, and underscores only (e.g., 'my_app')",
             }
 
         # Check if project already exists
@@ -203,7 +340,7 @@ class FlutterCLITool:
             return {
                 "success": False,
                 "error": f"Project '{project_name}' already exists",
-                "suggestion": "Choose a different name or remove existing project"
+                "suggestion": "Choose a different name or remove existing project",
             }
 
         # Check available disk space (require at least 500MB)
@@ -214,7 +351,7 @@ class FlutterCLITool:
                 return {
                     "success": False,
                     "error": "Insufficient disk space",
-                    "suggestion": f"At least 500MB required, {free_space:.0f}MB available"
+                    "suggestion": f"At least 500MB required, {free_space:.0f}MB available",
                 }
         except Exception:
             pass  # Skip disk space check if it fails
@@ -253,7 +390,9 @@ class FlutterCLITool:
         """Get available devices with caching"""
         current_time = time.time()
 
-        if self._devices_cache and (current_time - self._cache_time) < 60:  # Cache for 1 minute
+        if (
+            self._devices_cache and (current_time - self._cache_time) < 60
+        ):  # Cache for 1 minute
             return self._devices_cache
 
         result = await self.execute("devices", ["--machine"], timeout=30)
@@ -264,13 +403,13 @@ class FlutterCLITool:
                 self._devices_cache = {
                     "success": True,
                     "devices": devices,
-                    "count": len(devices)
+                    "count": len(devices),
                 }
             except json.JSONDecodeError:
                 self._devices_cache = {
                     "success": False,
                     "error": "Failed to parse devices output",
-                    "raw_output": result["output"]
+                    "raw_output": result["output"],
                 }
         else:
             self._devices_cache = result
@@ -278,10 +417,7 @@ class FlutterCLITool:
         return self._devices_cache
 
     async def run_app(
-        self,
-        device_id: Optional[str] = None,
-        hot_reload: bool = True,
-        **kwargs
+        self, device_id: Optional[str] = None, hot_reload: bool = True, **kwargs
     ) -> Dict[str, Any]:
         """Run Flutter app with device validation"""
 
@@ -291,14 +427,14 @@ class FlutterCLITool:
             return {
                 "success": False,
                 "error": "Failed to get available devices",
-                "suggestion": "Connect a device or start an emulator"
+                "suggestion": "Connect a device or start an emulator",
             }
 
         if devices_result["count"] == 0:
             return {
                 "success": False,
                 "error": "No devices available",
-                "suggestion": "Connect a device or start an emulator"
+                "suggestion": "Connect a device or start an emulator",
             }
 
         # Build options
@@ -313,10 +449,7 @@ class FlutterCLITool:
         return await self.execute("run", [], options, timeout=600)
 
     async def build_app(
-        self,
-        target: str = "apk",
-        release: bool = True,
-        **kwargs
+        self, target: str = "apk", release: bool = True, **kwargs
     ) -> Dict[str, Any]:
         """Build Flutter app"""
 
@@ -331,10 +464,7 @@ class FlutterCLITool:
         return await self.execute("build", args, options, timeout=1200)
 
     async def test_app(
-        self,
-        coverage: bool = False,
-        test_file: str = None,
-        **kwargs
+        self, coverage: bool = False, test_file: str = None, **kwargs
     ) -> Dict[str, Any]:
         """Run Flutter tests"""
 
@@ -378,7 +508,9 @@ class FlutterCLITool:
         """Run Flutter doctor"""
         return await self.execute("doctor", [], timeout=60)
 
-    async def custom_command(self, command: str, args: List[str] = None, **kwargs) -> Dict[str, Any]:
+    async def custom_command(
+        self, command: str, args: List[str] = None, **kwargs
+    ) -> Dict[str, Any]:
         """Execute custom Flutter command"""
         return await self.execute(command, args, kwargs, timeout=300)
 
@@ -386,7 +518,9 @@ class FlutterCLITool:
 def create_flutter_cli_tool(working_directory: str = ".") -> Any:
     """Create a Flutter CLI tool using MAS FunctionTool interface"""
 
-    def flutter_cli_func(command: str, args: List[str] = None, **kwargs) -> Dict[str, Any]:
+    def flutter_cli_func(
+        command: str, args: List[str] = None, **kwargs
+    ) -> Dict[str, Any]:
         """Execute Flutter CLI command - pure interface, no logic"""
 
         try:
@@ -402,7 +536,7 @@ def create_flutter_cli_tool(working_directory: str = ".") -> Any:
             return {
                 "success": False,
                 "error": str(e),
-                "suggestion": "Check Flutter installation and command syntax"
+                "suggestion": "Check Flutter installation and command syntax",
             }
 
     # Create MAS FunctionTool
@@ -416,24 +550,24 @@ def create_flutter_cli_tool(working_directory: str = ".") -> Any:
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The Flutter command to execute (e.g., 'create', 'build', 'run', 'test')"
+                        "description": "The Flutter command to execute (e.g., 'create', 'build', 'run', 'test')",
                     },
                     "args": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Arguments for the command"
+                        "description": "Arguments for the command",
                     },
                     "timeout": {
                         "type": "integer",
-                        "description": "Command timeout in seconds (default: 300)"
+                        "description": "Command timeout in seconds (default: 300)",
                     },
                     "check_doctor": {
                         "type": "boolean",
-                        "description": "Whether to check Flutter doctor before execution"
-                    }
+                        "description": "Whether to check Flutter doctor before execution",
+                    },
                 },
-                "required": ["command"]
-            }
+                "required": ["command"],
+            },
         )
 
     return None
