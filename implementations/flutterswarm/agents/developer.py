@@ -374,52 +374,22 @@ IMPORTANT:
         self, feature_description: str, project_context: Optional[TaskContext] = None
     ) -> ExecutionResult:
         """Implement a complete feature using LLM reasoning"""
-        # Create a specific prompt that forces file creation
+        # Simplified prompt focused on the agent's expertise
         implementation_prompt = f"""
-        Implement Flutter feature: {feature_description}
-
+        Based on the provided context and requirements, implement the following Flutter feature:
+        
+        Feature: {feature_description}
+        
         Project context: {project_context.__dict__ if project_context else 'None'}
-
-        MANDATORY FILE CREATION SEQUENCE:
-
-        1. FIRST - Update pubspec.yaml with ALL required dependencies:
-           - Check existing pubspec.yaml 
-           - Add any missing dependencies (provider, cupertino_icons, etc.)
-           - Use file_system to overwrite pubspec.yaml with complete content
-
-        2. SECOND - Create complete directory structure:
-           - Use file_system with operation='mkdir' for each directory
-           - Create ALL directories the app will need
-
-        3. THIRD - Create ALL Dart files in proper order:
-           - Domain models first (no dependencies)
-           - ViewModels/State management next
-           - Widgets and screens last
-           - Include COMPLETE file content from start to finish
-           - NEVER truncate or leave incomplete code
-
-        4. FOURTH - Create working tests:
-           - Update existing widget_test.dart to test the actual app
-           - Create meaningful test cases
-
-        CRITICAL REQUIREMENTS:
-        - EVERY import statement MUST have a corresponding file created
-        - EVERY file MUST be syntactically complete and compilable
-        - UI MUST be responsive with SingleChildScrollView and proper constraints
-        - ALL Python code blocks MUST be properly closed with ```
-        - If you run out of space, continue in additional code blocks
-
-        VALIDATION CHECKLIST (verify each):
-        ✓ pubspec.yaml updated with dependencies
-        ✓ All directories created
-        ✓ main.dart exists and imports work
-        ✓ All imported files exist
-        ✓ UI is responsive and scrollable
-        ✓ State management properly implemented
-        ✓ Tests updated and functional
-        ✓ No compilation errors
-
-        You MUST complete ALL files - do not leave anything incomplete!
+        
+        Please use your Flutter expertise to create a complete implementation including:
+        1. All necessary files and directories
+        2. Complete, compilable Dart code
+        3. Proper state management
+        4. Responsive UI design
+        5. Required dependencies in pubspec.yaml
+        
+        Use the file_system tool to create all files with complete content.
         """
 
         return await self.execute(implementation_prompt, project_context)

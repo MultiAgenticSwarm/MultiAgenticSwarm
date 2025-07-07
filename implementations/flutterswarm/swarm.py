@@ -328,6 +328,7 @@ class FlutterSwarm(BaseSwarm):
         """
         Create a complete Flutter application using LLM-powered agents.
         All Flutter knowledge and decisions come from LLMs.
+        Central orchestrator that manually iterates through agents.
         """
 
         self.logger.info(f"Creating Flutter app: {app_description}")
@@ -349,22 +350,216 @@ class FlutterSwarm(BaseSwarm):
             "project_path": self.project_path,
         }
 
-        # Execute app creation workflow using MAS
-        result = await self.execute_workflow("create_flutter_app", context)
+        # Initialize execution result aggregation
+        all_created_files = []
+        all_modified_files = []
+        all_outputs = {}
+        execution_start_time = __import__("time").time()
 
-        # Convert to ExecutionResult if needed
-        if not isinstance(result, ExecutionResult):
-            result = ExecutionResult(
+        try:
+            # Step 1: Architect - Design system architecture
+            self.logger.info("Step 1: Architect analyzing requirements...")
+            architect_context = TaskContext(
+                project_path=self.project_path, metadata=context
+            )
+            # First analyze requirements, then design architecture
+            requirements_analysis = {
+                "app_description": app_description,
+                "features": features,
+                "platforms": platforms,
+                "design_requirements": design_requirements or {},
+                "performance_requirements": performance_requirements or {},
+            }
+            architect_result = await self.architect.design_architecture(
+                requirements_analysis=requirements_analysis, context=architect_context
+            )
+
+            # Execute architect's code immediately
+            if architect_result.success:
+                # Extract the actual response content for code parsing
+                output_text = ""
+                if hasattr(architect_result, "output"):
+                    if isinstance(architect_result.output, dict):
+                        # Look for common response keys
+                        for key in ["content", "response", "output", "message"]:
+                            if key in architect_result.output:
+                                output_text = str(architect_result.output[key])
+                                break
+                        if not output_text:
+                            output_text = str(architect_result.output)
+                    else:
+                        output_text = str(architect_result.output)
+
+                if output_text:
+                    await self._parse_and_execute_code(output_text)
+
+                all_outputs["architect"] = architect_result.output
+                context["architect_result"] = architect_result.output
+            else:
+                self.logger.error(f"Architect failed: {architect_result.error_message}")
+                return ExecutionResult(
+                    success=False,
+                    agent_name="FlutterSwarm",
+                    task_id="create_flutter_app",
+                    error_message=f"Architect failed: {architect_result.error_message}",
+                    execution_time=__import__("time").time() - execution_start_time,
+                    metadata=context,
+                )
+
+            # Step 2: UI Designer - Create UI designs
+            self.logger.info("Step 2: UI Designer creating interface...")
+            ui_designer_context = TaskContext(
+                project_path=self.project_path,
+                metadata={**context, "architecture_design": architect_result.output},
+            )
+            ui_designer_result = await self.ui_designer.design_ui(
+                context=ui_designer_context
+            )
+
+            # Execute UI designer's code immediately
+            if ui_designer_result.success:
+                # Extract the actual response content for code parsing
+                output_text = ""
+                if hasattr(ui_designer_result, "output"):
+                    if isinstance(ui_designer_result.output, dict):
+                        # Look for common response keys
+                        for key in ["content", "response", "output", "message"]:
+                            if key in ui_designer_result.output:
+                                output_text = str(ui_designer_result.output[key])
+                                break
+                        if not output_text:
+                            output_text = str(ui_designer_result.output)
+                    else:
+                        output_text = str(ui_designer_result.output)
+
+                if output_text:
+                    await self._parse_and_execute_code(output_text)
+
+                all_outputs["ui_designer"] = ui_designer_result.output
+                context["ui_design"] = ui_designer_result.output
+            else:
+                self.logger.error(
+                    f"UI Designer failed: {ui_designer_result.error_message}"
+                )
+                return ExecutionResult(
+                    success=False,
+                    agent_name="FlutterSwarm",
+                    task_id="create_flutter_app",
+                    error_message=f"UI Designer failed: {ui_designer_result.error_message}",
+                    execution_time=__import__("time").time() - execution_start_time,
+                    metadata=context,
+                )
+
+            # Step 3: Developer - Implement features
+            self.logger.info("Step 3: Developer implementing features...")
+            developer_context = TaskContext(
+                project_path=self.project_path,
+                metadata={**context, "ui_design": ui_designer_result.output},
+            )
+            developer_result = await self.developer.implement_feature(
+                feature_description=f"Implement all features: {', '.join(features)}",
+                project_context=developer_context,
+            )
+
+            # Execute developer's code immediately
+            if developer_result.success:
+                # Extract the actual response content for code parsing
+                output_text = ""
+                if hasattr(developer_result, "output"):
+                    if isinstance(developer_result.output, dict):
+                        # Look for common response keys
+                        for key in ["content", "response", "output", "message"]:
+                            if key in developer_result.output:
+                                output_text = str(developer_result.output[key])
+                                break
+                        if not output_text:
+                            output_text = str(developer_result.output)
+                    else:
+                        output_text = str(developer_result.output)
+
+                if output_text:
+                    await self._parse_and_execute_code(output_text)
+
+                all_outputs["developer"] = developer_result.output
+                context["implementation"] = developer_result.output
+            else:
+                self.logger.error(f"Developer failed: {developer_result.error_message}")
+                return ExecutionResult(
+                    success=False,
+                    agent_name="FlutterSwarm",
+                    task_id="create_flutter_app",
+                    error_message=f"Developer failed: {developer_result.error_message}",
+                    execution_time=__import__("time").time() - execution_start_time,
+                    metadata=context,
+                )
+
+            # Step 4: Tester - Create tests
+            self.logger.info("Step 4: Tester creating tests...")
+            tester_context = TaskContext(
+                project_path=self.project_path,
+                metadata={**context, "implementation": developer_result.output},
+            )
+            tester_result = await self.tester.write_tests(context=tester_context)
+
+            # Execute tester's code immediately
+            if tester_result.success:
+                # Extract the actual response content for code parsing
+                output_text = ""
+                if hasattr(tester_result, "output"):
+                    if isinstance(tester_result.output, dict):
+                        # Look for common response keys
+                        for key in ["content", "response", "output", "message"]:
+                            if key in tester_result.output:
+                                output_text = str(tester_result.output[key])
+                                break
+                        if not output_text:
+                            output_text = str(tester_result.output)
+                    else:
+                        output_text = str(tester_result.output)
+
+                if output_text:
+                    await self._parse_and_execute_code(output_text)
+
+                all_outputs["tester"] = tester_result.output
+            else:
+                self.logger.warning(
+                    f"Tester failed but continuing: {tester_result.error_message}"
+                )
+                all_outputs["tester"] = tester_result.error_message
+
+            # Aggregate results
+            execution_time = __import__("time").time() - execution_start_time
+
+            # Create final execution result
+            final_result = ExecutionResult(
                 success=True,
                 agent_name="FlutterSwarm",
                 task_id="create_flutter_app",
-                output=result,
-                execution_time=0,
-                metadata=context,
+                output=all_outputs,
+                execution_time=execution_time,
+                metadata={
+                    **context,
+                    "created_files": all_created_files,
+                    "modified_files": all_modified_files,
+                    "agent_results": all_outputs,
+                },
             )
 
-        self.logger.info(f"Flutter app creation completed: {result.success}")
-        return result
+            self.logger.info(
+                f"Flutter app creation completed successfully in {execution_time:.2f}s"
+            )
+            return final_result
+
+        except Exception as e:
+            self.logger.error(f"App creation failed with exception: {str(e)}")
+            return ExecutionResult(
+                success=False,
+                agent_name="FlutterSwarm",
+                task_id="create_flutter_app",
+                error_message=f"App creation failed: {str(e)}",
+                execution_time=__import__("time").time() - execution_start_time,
+                metadata=context,
+            )
 
     async def implement_feature(
         self, feature_description: str, context: Optional[Dict[str, Any]] = None

@@ -46,7 +46,7 @@ async def create_basic_music_app():
         flutter_swarm = FlutterSwarm(
             project_path=project_path,
             llm_provider="anthropic",  # Change to your preferred provider
-            llm_model="claude-3-5-sonnet-20241022",  # Use a suitable model
+            llm_model="claude-3-5-sonnet-20240620",  # Use a valid and current model
             temperature=0.7,
         )
         print("✓ FlutterSwarm initialized successfully")
@@ -109,7 +109,23 @@ async def create_basic_music_app():
 
         if result.success:
             print("✓ App creation completed successfully!")
-            print(f"Output: {result.output}")
+            print(f"Execution time: {result.execution_time:.2f}s")
+
+            # Display results from each agent
+            if isinstance(result.output, dict):
+                for agent_name, agent_output in result.output.items():
+                    print(f"✓ {agent_name.title()} completed")
+
+            # Display file creation info if available
+            metadata = result.metadata or {}
+            created_files = metadata.get("created_files", [])
+            modified_files = metadata.get("modified_files", [])
+
+            if created_files:
+                print(f"✓ Created {len(created_files)} files")
+            if modified_files:
+                print(f"✓ Modified {len(modified_files)} files")
+
             return True
         else:
             print(f"✗ App creation failed: {result.error_message}")
