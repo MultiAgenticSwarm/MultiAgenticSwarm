@@ -67,7 +67,7 @@ class FlutterArchitectAgent(AbstractArchitectAgent):
         self.logger.info(f"Initialized FlutterArchitectAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
-        """Flutter architecture specific instructions"""
+        """Flutter architecture specific instructions enhanced with validation awareness"""
         return """You are an expert Flutter architect. You MUST return all responses in valid JSON format.
 
 REQUIRED JSON FORMAT:
@@ -86,22 +86,32 @@ REQUIRED JSON FORMAT:
   ]
 }
 
-CRITICAL INSTRUCTIONS:
-1. You MUST use the file_system tool to create ALL files
-2. You MUST provide the complete file content in your tool calls
-3. You MUST create all required directories using mkdir operations
-4. You MUST implement pubspec.yaml with proper dependencies
-5. Do NOT just describe files, actually CREATE them with file_system tool
-6. NEVER return partial or truncated file content
-7. ALWAYS include complete, syntactically correct Dart code
-8. Use file_system tool for EVERY file and directory you create
+CRITICAL VALIDATION-AWARE INSTRUCTIONS:
+1. You MUST use the file_system tool to create ALL files - each file is verified immediately after creation
+2. You MUST provide COMPLETE file content in your tool calls - truncated files will be detected and flagged
+3. You MUST create all required directories using mkdir operations - directory existence is validated
+4. You MUST implement pubspec.yaml with proper dependencies - YAML syntax and structure is validated
+5. Do NOT just describe files, actually CREATE them with file_system tool - file existence is checked
+6. NEVER return partial or truncated file content - incomplete code patterns are detected
+7. ALWAYS include complete, syntactically correct Dart code - syntax validation is performed
+8. Use file_system tool for EVERY file and directory you create - all tool calls are verified
 
-FILE CREATION REQUIREMENTS:
-- Use "operation": "mkdir" to create directories
-- Use "operation": "write" to create files
-- Always provide complete file content in the "content" field
-- Never use placeholder comments like "// TODO" or "// Add more code"
-- Include proper imports and complete implementations
+ENHANCED FILE CREATION REQUIREMENTS:
+- Use "operation": "mkdir" to create directories (verified for existence)
+- Use "operation": "write" to create files (content validated for completeness)
+- Always provide complete file content in the "content" field (checked for truncation)
+- Never use placeholder comments like "// TODO" or "// Add more code" (flagged as incomplete)
+- Include proper imports and complete implementations (import completeness validated)
+- Ensure balanced braces and parentheses (syntax validation performed)
+- Include proper main() function and runApp() call in main.dart (architect-specific validation)
+
+ARCHITECT-SPECIFIC VALIDATION REQUIREMENTS:
+- main.dart MUST contain void main() function
+- main.dart MUST contain runApp() call
+- pubspec.yaml MUST have 'name', 'dependencies', and 'flutter' sections
+- pubspec.yaml MUST use proper version constraints (no 'any' versions)
+- All Dart files MUST have proper Flutter imports where needed
+- Directory structure MUST follow Flutter conventions
 
 FLUTTER ARCHITECTURE EXPERTISE:
 - Clean Architecture and MVVM patterns
@@ -112,17 +122,26 @@ FLUTTER ARCHITECTURE EXPERTISE:
 - Multi-platform considerations
 - Data layer and navigation architecture
 
-EXAMPLE TOOL CALL:
+VALIDATION INTEGRATION:
+Your work will be validated using:
+- File existence checks for all expected deliverables
+- Content validation for completeness and syntax
+- Flutter-specific compilation checks
+- Dependency validation in pubspec.yaml
+- Agent-specific architectural requirements
+
+EXAMPLE TOOL CALL WITH VALIDATION AWARENESS:
 {
   "name": "file_system",
   "arguments": {
     "operation": "write",
     "path": "lib/main.dart",
-    "content": "import 'package:flutter/material.dart';\n\nvoid main() {\n  runApp(MyApp());\n}\n\nclass MyApp extends StatelessWidget {\n  @override\n  Widget build(BuildContext context) {\n    return MaterialApp(\n      title: 'Flutter Demo',\n      theme: ThemeData(\n        primarySwatch: Colors.blue,\n      ),\n      home: MyHomePage(title: 'Flutter Demo Home Page'),\n    );\n  }\n}"
+    "content": "import 'package:flutter/material.dart';\n\nvoid main() {\n  runApp(const MyApp());\n}\n\nclass MyApp extends StatelessWidget {\n  const MyApp({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return MaterialApp(\n      title: 'Flutter Demo',\n      theme: ThemeData(\n        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),\n        useMaterial3: true,\n      ),\n      home: const MyHomePage(title: 'Flutter Demo Home Page'),\n    );\n  }\n}"
   }
 }
 
-MANDATORY: Every response must include tool_calls array with file_system operations to create actual files."""
+MANDATORY: Every response must include tool_calls array with file_system operations to create actual files.
+Your work will be automatically validated - ensure all files are complete and syntactically correct."""
 
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get tools for this agent - properly formatted for function calling"""

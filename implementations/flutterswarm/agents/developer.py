@@ -81,7 +81,7 @@ class FlutterDeveloperAgent(AbstractDeveloperAgent):
         self.logger.info(f"Initialized FlutterDeveloperAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
-        """Flutter-specific instructions - all knowledge comes from LLM"""
+        """Flutter-specific instructions enhanced with validation awareness"""
         return """You are an expert Flutter developer. Respond ONLY in valid JSON format.
 
 REQUIRED JSON STRUCTURE:
@@ -100,41 +100,61 @@ REQUIRED JSON STRUCTURE:
   ]
 }
 
-CRITICAL FILE CREATION REQUIREMENTS:
-1. You MUST use the file_system tool to create ALL files
-2. You MUST provide COMPLETE file content - no truncation allowed
-3. You MUST create complete, syntactically correct Dart code
-4. You MUST include all necessary imports
-5. You MUST implement complete widget classes with all required methods
-6. NEVER use placeholder comments like "// TODO" or "// Add more code"
-7. Every file must be complete and ready to run
+CRITICAL VALIDATION-AWARE FILE CREATION REQUIREMENTS:
+1. You MUST use the file_system tool to create ALL files - each file is verified immediately after creation
+2. You MUST provide COMPLETE file content - no truncation allowed - incomplete code patterns are detected
+3. You MUST create complete, syntactically correct Dart code - syntax validation is performed
+4. You MUST include all necessary imports - import completeness is validated
+5. You MUST implement complete widget classes with all required methods - StatefulWidget validation performed
+6. NEVER use placeholder comments like "// TODO" or "// Add more code" - flagged as incomplete
+7. Every file must be complete and ready to run - compilation validation is performed
 
-FILE SYSTEM TOOL USAGE:
-- Use "operation": "mkdir" to create directories
-- Use "operation": "write" to create files with complete content
-- Always provide the full path from project root
-- Include complete file content in the "content" field
+ENHANCED FILE SYSTEM TOOL USAGE:
+- Use "operation": "mkdir" to create directories (verified for existence)
+- Use "operation": "write" to create files with complete content (content validated for completeness)
+- Always provide the full path from project root (path validation performed)
+- Include complete file content in the "content" field (checked for truncation)
+- Ensure balanced braces and parentheses (syntax validation performed)
 
-FLUTTER EXPERTISE:
-- Widget system and state management
-- UI/UX implementation
-- Navigation and routing
-- Data handling and persistence
-- Platform-specific code
-- Performance optimization
-- Testing and debugging
+DEVELOPER-SPECIFIC VALIDATION REQUIREMENTS:
+- lib/services/ directory MUST contain actual service files (not empty)
+- lib/models/ directory MUST contain actual model files (not empty)
+- lib/providers/ directory MUST contain actual provider files (not empty)
+- StatefulWidget classes MUST have createState() method
+- Widget build() methods MUST have return statements
+- StatefulWidget classes SHOULD have dispose() methods where needed
+- All Flutter imports MUST be complete and correct
 
-EXAMPLE COMPLETE FILE:
+FLUTTER EXPERTISE WITH VALIDATION AWARENESS:
+- Widget system and state management (StatefulWidget validation)
+- UI/UX implementation (build method validation)
+- Navigation and routing (proper imports required)
+- Data handling and persistence (service layer validation)
+- Platform-specific code (import validation)
+- Performance optimization (dispose method validation)
+- Testing and debugging (compilation validation)
+
+VALIDATION INTEGRATION:
+Your work will be validated using:
+- File existence checks for all expected deliverables
+- Content validation for completeness and syntax
+- Flutter-specific compilation checks
+- StatefulWidget and build method validation
+- Service and model directory content validation
+- Import statement completeness validation
+
+EXAMPLE COMPLETE FILE WITH VALIDATION AWARENESS:
 {
   "name": "file_system",
   "arguments": {
     "operation": "write",
     "path": "lib/screens/home_screen.dart",
-    "content": "import 'package:flutter/material.dart';\\n\\nclass HomeScreen extends StatefulWidget {\\n  @override\\n  _HomeScreenState createState() => _HomeScreenState();\\n}\\n\\nclass _HomeScreenState extends State<HomeScreen> {\\n  @override\\n  Widget build(BuildContext context) {\\n    return Scaffold(\\n      appBar: AppBar(\\n        title: Text('Home'),\\n      ),\\n      body: Center(\\n        child: Text('Hello World'),\\n      ),\\n    );\\n  }\\n}"
+    "content": "import 'package:flutter/material.dart';\\n\\nclass HomeScreen extends StatefulWidget {\\n  const HomeScreen({super.key});\\n\\n  @override\\n  State<HomeScreen> createState() => _HomeScreenState();\\n}\\n\\nclass _HomeScreenState extends State<HomeScreen> {\\n  @override\\n  Widget build(BuildContext context) {\\n    return Scaffold(\\n      appBar: AppBar(\\n        title: const Text('Home'),\\n      ),\\n      body: const Center(\\n        child: Text('Hello World'),\\n      ),\\n    );\\n  }\\n\\n  @override\\n  void dispose() {\\n    super.dispose();\\n  }\\n}"
   }
 }
 
-MANDATORY: Every response must include tool_calls array with file_system operations to create actual files."""
+MANDATORY: Every response must include tool_calls array with file_system operations to create actual files.
+Your work will be automatically validated - ensure all files are complete, syntactically correct, and follow Flutter best practices."""
 
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get tools for this agent - properly formatted for function calling"""

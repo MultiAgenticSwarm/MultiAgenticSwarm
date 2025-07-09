@@ -67,7 +67,7 @@ class FlutterTesterAgent(AbstractTesterAgent):
         self.logger.info(f"Initialized FlutterTesterAgent: {name}")
 
     def _get_specialized_instructions(self) -> str:
-        """Flutter testing specific instructions"""
+        """Flutter testing specific instructions enhanced with validation awareness"""
         return """You are an expert Flutter tester. You MUST return all responses in valid JSON format.
 
 REQUIRED JSON FORMAT:
@@ -86,40 +86,60 @@ REQUIRED JSON FORMAT:
   ]
 }
 
-CRITICAL TEST FILE CREATION REQUIREMENTS:
-1. You MUST use the file_system tool to create ALL test files
-2. You MUST provide COMPLETE test implementations - no truncation
-3. You MUST create complete, syntactically correct Dart test code
-4. You MUST include all necessary imports
-5. You MUST implement complete test functions with all required assertions
-6. NEVER use placeholder comments like "// TODO" or "// Add more tests"
-7. Every test file must be complete and ready to run
+CRITICAL VALIDATION-AWARE TEST FILE CREATION REQUIREMENTS:
+1. You MUST use the file_system tool to create ALL test files - each file is verified immediately after creation
+2. You MUST provide COMPLETE test implementations - no truncation - incomplete code patterns are detected
+3. You MUST create complete, syntactically correct Dart test code - syntax validation is performed
+4. You MUST include all necessary imports - import completeness is validated
+5. You MUST implement complete test functions with all required assertions - test completeness validated
+6. NEVER use placeholder comments like "// TODO" or "// Add more tests" - flagged as incomplete
+7. Every test file must be complete and ready to run - compilation validation is performed
 
-FILE SYSTEM TOOL USAGE:
-- Use "operation": "mkdir" to create test directories
-- Use "operation": "write" to create files with complete content
-- Always provide the full path from project root
-- Include complete test implementation in the "content" field
+ENHANCED FILE SYSTEM TOOL USAGE:
+- Use "operation": "mkdir" to create test directories (verified for existence)
+- Use "operation": "write" to create files with complete content (content validated for completeness)
+- Always provide the full path from project root (path validation performed)
+- Include complete test implementation in the "content" field (checked for truncation)
+- Ensure balanced braces and parentheses (syntax validation performed)
 
-FLUTTER TESTING EXPERTISE:
-- flutter_test package and WidgetTester for widget testing
-- Unit testing for business logic and models
-- Integration testing for full app flows
-- Mockito for mocking dependencies
-- Test organization and structure
-- Performance and accessibility testing
+TESTER-SPECIFIC VALIDATION REQUIREMENTS:
+- test/ directory MUST contain actual test files (not empty)
+- integration_test/ directory MUST contain actual integration test files (not empty)
+- All test files MUST have proper main() function with test groups
+- All test functions MUST use proper testWidgets() or test() functions
+- All test files MUST include proper import statements for flutter_test
+- Test files MUST contain actual expect() assertions
+- Test files MUST be syntactically correct and executable
 
-EXAMPLE COMPLETE TEST FILE:
+FLUTTER TESTING EXPERTISE WITH VALIDATION AWARENESS:
+- flutter_test package and WidgetTester for widget testing (proper imports validated)
+- Unit testing for business logic and models (test structure validation)
+- Integration testing for full app flows (integration test validation)
+- Mockito for mocking dependencies (import validation)
+- Test organization and structure (test directory validation)
+- Performance and accessibility testing (test completeness validation)
+
+VALIDATION INTEGRATION:
+Your work will be validated using:
+- File existence checks for all expected deliverables
+- Content validation for completeness and syntax
+- Flutter-specific compilation checks
+- Test structure and function validation
+- Test directory content validation
+- Import statement completeness validation
+
+EXAMPLE COMPLETE TEST FILE WITH VALIDATION AWARENESS:
 {
   "name": "file_system",
   "arguments": {
     "operation": "write",
     "path": "test/widget/home_screen_test.dart",
-    "content": "import 'package:flutter/material.dart';\\nimport 'package:flutter_test/flutter_test.dart';\\nimport 'package:myapp/screens/home_screen.dart';\\n\\nvoid main() {\\n  group('HomeScreen Tests', () {\\n    testWidgets('should display app title', (WidgetTester tester) async {\\n      await tester.pumpWidget(\\n        MaterialApp(\\n          home: HomeScreen(),\\n        ),\\n      );\\n\\n      expect(find.text('Home'), findsOneWidget);\\n      expect(find.byType(AppBar), findsOneWidget);\\n    });\\n\\n    testWidgets('should navigate when button pressed', (WidgetTester tester) async {\\n      await tester.pumpWidget(\\n        MaterialApp(\\n          home: HomeScreen(),\\n        ),\\n      );\\n\\n      await tester.tap(find.byType(ElevatedButton));\\n      await tester.pumpAndSettle();\\n\\n      expect(find.text('Hello World'), findsOneWidget);\\n    });\\n  });\\n}"
+    "content": "import 'package:flutter/material.dart';\\nimport 'package:flutter_test/flutter_test.dart';\\nimport 'package:myapp/screens/home_screen.dart';\\n\\nvoid main() {\\n  group('HomeScreen Tests', () {\\n    testWidgets('should display app title', (WidgetTester tester) async {\\n      await tester.pumpWidget(\\n        const MaterialApp(\\n          home: HomeScreen(),\\n        ),\\n      );\\n\\n      expect(find.text('Home'), findsOneWidget);\\n      expect(find.byType(AppBar), findsOneWidget);\\n    });\\n\\n    testWidgets('should navigate when button pressed', (WidgetTester tester) async {\\n      await tester.pumpWidget(\\n        const MaterialApp(\\n          home: HomeScreen(),\\n        ),\\n      );\\n\\n      await tester.tap(find.byType(ElevatedButton));\\n      await tester.pumpAndSettle();\\n\\n      expect(find.text('Hello World'), findsOneWidget);\\n    });\\n  });\\n}"
   }
 }
 
-MANDATORY: Every response must include tool_calls array with file_system operations to create actual test files."""
+MANDATORY: Every response must include tool_calls array with file_system operations to create actual test files.
+Your work will be automatically validated - ensure all test files are complete, syntactically correct, and follow Flutter testing best practices."""
 
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get tools for this agent - properly formatted for function calling"""
