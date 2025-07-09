@@ -330,8 +330,7 @@ class FlutterCLITool:
         if not self._validate_project_name(project_name):
             return {
                 "success": False,
-                "error": "Invalid project name",
-                "suggestion": "Use lowercase letters, numbers, and underscores only (e.g., 'my_app')",
+                "error": f"Invalid project name: {project_name}. Flutter project names must follow Dart package naming conventions.",
             }
 
         # Check if project already exists
@@ -339,52 +338,26 @@ class FlutterCLITool:
         if os.path.exists(project_path):
             return {
                 "success": False,
-                "error": f"Project '{project_name}' already exists",
-                "suggestion": "Choose a different name or remove existing project",
+                "error": f"Project already exists: {project_path}",
             }
 
-        # Check available disk space (require at least 500MB)
-        try:
-            stat = shutil.disk_usage(self.working_directory)
-            free_space = stat.free / (1024 * 1024)  # MB
-            if free_space < 500:
-                return {
-                    "success": False,
-                    "error": "Insufficient disk space",
-                    "suggestion": f"At least 500MB required, {free_space:.0f}MB available",
-                }
-        except Exception:
-            pass  # Skip disk space check if it fails
-
-        # Build arguments
-        args = [project_name]
+        # Prepare command arguments
+        args = ["create"]
 
         if template:
             args.extend(["--template", template])
+
         if org:
             args.extend(["--org", org])
+
         if platforms:
             args.extend(["--platforms", ",".join(platforms)])
 
-        # Add any additional options from kwargs
-        for key, value in kwargs.items():
-            if key.startswith("--"):
-                args.extend([key, str(value)])
-            else:
-                args.extend([f"--{key}", str(value)])
+        # Add project name
+        args.append(project_name)
 
-        # Execute create command
-        result = await self.execute("create", args, timeout=600)
-
-        # If creation failed, try to clean up
-        if not result["success"] and os.path.exists(project_path):
-            try:
-                shutil.rmtree(project_path)
-                self.logger.info(f"Cleaned up failed project creation: {project_path}")
-            except Exception as e:
-                self.logger.warning(f"Failed to clean up project: {e}")
-
-        return result
+        # Execute command
+        return await self.execute("create", args)
 
     async def get_devices(self) -> Dict[str, Any]:
         """Get available devices with caching"""

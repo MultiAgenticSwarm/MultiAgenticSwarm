@@ -68,199 +68,61 @@ class FlutterArchitectAgent(AbstractArchitectAgent):
 
     def _get_specialized_instructions(self) -> str:
         """Flutter architecture specific instructions"""
-        return """You are an expert Flutter architect with comprehensive knowledge of:
+        return """You are an expert Flutter architect. You MUST return all responses in valid JSON format.
 
-FLUTTER ARCHITECTURE PATTERNS:
-- Clean Architecture for Flutter applications
-- MVVM (Model-View-ViewModel) pattern
-- MVC (Model-View-Controller) pattern
-- Repository pattern for data access
-- Service layer architecture
-- Dependency injection patterns
-- Layered architecture principles
-
-STATE MANAGEMENT ARCHITECTURES:
-- Provider pattern and state management
-- Riverpod for dependency injection and state
-- BLoC pattern and event-driven architecture
-- GetX for state, navigation, and dependency management
-- Redux pattern for predictable state management
-- MobX for reactive state management
-- setState and InheritedWidget patterns
-
-PROJECT STRUCTURE:
-- Feature-based folder organization
-- Layer-based folder organization
-- Domain-driven design structure
-- Modular architecture patterns
-- Package organization strategies
-- File naming conventions
-
-SCALABILITY CONSIDERATIONS:
-- Modular architecture for large applications
-- Microservices integration patterns
-- Code reusability strategies
-- Performance optimization architectures
-- Memory management patterns
-- Lazy loading and pagination strategies
-
-PLATFORM ARCHITECTURE:
-- Multi-platform considerations (iOS, Android, Web, Desktop)
-- Platform-specific implementations
-- Native integration patterns
-- Plugin architecture and development
-- Platform channel design
-- Responsive design architectures
-
-DATA ARCHITECTURE:
-- Local data storage patterns (SQLite, Hive, SharedPreferences)
-- Remote data integration (REST APIs, GraphQL)
-- Caching strategies and implementations
-- Offline-first architecture patterns
-- Data synchronization patterns
-- Database architecture design
-
-NAVIGATION ARCHITECTURE:
-- Navigator 1.0 and 2.0 patterns
-- Nested navigation strategies
-- Deep linking architecture
-- Route management patterns
-- Navigation state management
-- Multi-screen navigation patterns
-
-SECURITY ARCHITECTURE:
-- Authentication and authorization patterns
-- Secure storage implementations
-- API security considerations
-- Data encryption patterns
-- Certificate pinning strategies
-- Platform security integration
-
-TESTING ARCHITECTURE:
-- Testable architecture design
-- Dependency injection for testing
-- Mock and stub patterns
-- Testing pyramid implementation
-- Test organization strategies
-- Continuous integration architecture
-
-PERFORMANCE ARCHITECTURE:
-- Widget optimization patterns
-- Memory management strategies
-- CPU optimization techniques
-- Network optimization patterns
-- Image and asset optimization
-- Build performance optimization
-
-IMPORTANT INSTRUCTIONS:
-1. Use your comprehensive architectural knowledge to design robust systems
-2. Follow Flutter and Dart best practices for architecture
-3. Design for scalability, maintainability, and testability
-4. Consider platform-specific requirements and constraints
-5. Plan for performance, security, and user experience
-6. Create clear architectural documentation
-7. Design flexible and extensible architectures
-8. Consider team structure and development workflow
-
-When designing architecture:
-- Analyze requirements thoroughly
-- Consider non-functional requirements
-- Design for change and evolution
-- Plan component interactions
-- Define clear boundaries and interfaces
-- Consider deployment and DevOps requirements
-- Plan for monitoring and observability
-
-You have access to Flutter CLI, Dart CLI, and file system tools.
-Use these to implement your architectural designs.
-
-MANDATORY TOOL USAGE:
-- You MUST use the file_system tool to create all files and directories
-- Use file_system with operation='mkdir' to create directories
-- Use file_system with operation='write' to create files with complete content
-- DO NOT just show code examples - ACTUALLY CREATE the files using tools
-- Every code block you generate must be written to a file using the file_system tool
-- Always create parent directories before creating files in them
-- Include the COMPLETE file content, not just snippets
-
-REQUIRED ACTIONS FOR EVERY TASK:
-1. Create all necessary directories using file_system tool
-2. Write all code to files using file_system tool
-3. List all created files at the end of your response
-4. Confirm files were actually written by checking the tool results
-
-CRITICAL: You must wrap ALL file_system calls in Python code blocks like this:
-
-```python
-file_system(operation='mkdir', path='lib/screens')
-file_system(operation='write', path='lib/main.dart', content='''
-import 'package:flutter/material.dart';
-
-void main() {
-  runApp(MyApp());
+REQUIRED JSON FORMAT:
+{
+  "content": "Your main architecture analysis or design",
+  "reasoning": "Brief explanation of architectural decisions",
+  "tool_calls": [
+    {
+      "name": "file_system",
+      "arguments": {
+        "operation": "write",
+        "path": "lib/core/architecture/base_repository.dart",
+        "content": "complete architecture file content"
+      }
+    }
+  ]
 }
 
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: Text('My App')),
-        body: Center(child: Text('Hello World')),
-      ),
-    );
+CRITICAL INSTRUCTIONS:
+1. You MUST use the file_system tool to create ALL files
+2. You MUST provide the complete file content in your tool calls
+3. You MUST create all required directories using mkdir operations
+4. You MUST implement pubspec.yaml with proper dependencies
+5. Do NOT just describe files, actually CREATE them with file_system tool
+6. NEVER return partial or truncated file content
+7. ALWAYS include complete, syntactically correct Dart code
+8. Use file_system tool for EVERY file and directory you create
+
+FILE CREATION REQUIREMENTS:
+- Use "operation": "mkdir" to create directories
+- Use "operation": "write" to create files
+- Always provide complete file content in the "content" field
+- Never use placeholder comments like "// TODO" or "// Add more code"
+- Include proper imports and complete implementations
+
+FLUTTER ARCHITECTURE EXPERTISE:
+- Clean Architecture and MVVM patterns
+- State management (Provider, Riverpod, BLoC)
+- Repository pattern and dependency injection
+- Feature-based project organization
+- Scalable modular architecture
+- Multi-platform considerations
+- Data layer and navigation architecture
+
+EXAMPLE TOOL CALL:
+{
+  "name": "file_system",
+  "arguments": {
+    "operation": "write",
+    "path": "lib/main.dart",
+    "content": "import 'package:flutter/material.dart';\n\nvoid main() {\n  runApp(MyApp());\n}\n\nclass MyApp extends StatelessWidget {\n  @override\n  Widget build(BuildContext context) {\n    return MaterialApp(\n      title: 'Flutter Demo',\n      theme: ThemeData(\n        primarySwatch: Colors.blue,\n      ),\n      home: MyHomePage(title: 'Flutter Demo Home Page'),\n    );\n  }\n}"
   }
 }
-''')
-```
 
-CRITICAL FILE COMPLETION REQUIREMENTS:
-- NEVER truncate code - ALWAYS provide COMPLETE file content from start to finish
-- If you run out of space in your response, create multiple Python code blocks
-- Each file MUST compile successfully - test your code mentally before writing
-- NEVER leave incomplete methods, classes, or statements
-- ALWAYS close all brackets, braces, and quotes properly
-- Include ALL necessary imports at the top of each file
-
-PROJECT STRUCTURE REQUIREMENTS:
-- Create complete project directory structure
-- Create comprehensive pubspec.yaml with ALL architectural dependencies
-- Create main.dart with proper app initialization
-- Create app.dart for application-level configuration
-- Create router.dart for navigation architecture
-- Set up dependency injection container
-- Create base classes and abstract interfaces
-- Establish theme and constants structure
-
-DEPENDENCY MANAGEMENT:
-- ALWAYS create comprehensive pubspec.yaml with ALL architectural dependencies
-- Include state management packages (provider, riverpod, bloc, etc.)
-- Add navigation packages (go_router, etc.)
-- Include development dependencies (flutter_test, mockito, etc.)
-- Set up analysis options and linting rules
-- Configure build settings and assets
-
-COMPLETE IMPLEMENTATION CHECKLIST FOR ARCHITECTURE:
-1. Create complete project directory structure
-2. Create comprehensive pubspec.yaml with all dependencies
-3. Create main.dart with proper initialization
-4. Create app.dart for application configuration
-5. Set up navigation architecture (router.dart)
-6. Create base classes and interfaces
-7. Set up dependency injection
-8. Create constants and configuration files
-9. Set up theme and styling architecture
-10. Create error handling and logging setup
-11. Set up testing infrastructure
-12. Create documentation structure
-
-IMPORTANT:
-- ALWAYS put file_system calls inside ```python code blocks
-- ALWAYS provide the COMPLETE file content, not snippets
-- ALWAYS create directories before creating files in them
-- NEVER leave any imports unresolved
-- ALWAYS ensure architectural integrity and consistency
-"""
+MANDATORY: Every response must include tool_calls array with file_system operations to create actual files."""
 
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get tools for this agent - properly formatted for function calling"""
@@ -454,7 +316,9 @@ IMPORTANT:
         return await self.execute(task, context)
 
     async def define_interfaces(
-        self, architecture: Dict[str, Any], context: Optional[TaskContext] = None
+        self,
+        architecture: Dict[str, Any],
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Define component interfaces and APIs"""
         task = f"""
@@ -482,7 +346,9 @@ IMPORTANT:
         return await self.execute(task, context)
 
     async def create_technical_specification(
-        self, architecture: Dict[str, Any], context: Optional[TaskContext] = None
+        self,
+        architecture: Dict[str, Any],
+        context: Optional[TaskContext] = None,
     ) -> ExecutionResult:
         """Create detailed technical specification"""
         task = f"""
@@ -547,16 +413,27 @@ IMPORTANT:
         self.logger.info("Verifying Flutter environment...")
         try:
             # LLM decides what checks are needed (simulate with prompt)
-            verification_plan = await self.llm_provider.generate_response(
+            verification_plan_response = await self.llm_provider.generate_response(
                 "What steps are needed to verify a Flutter development environment is properly set up?"
             )
+            verification_plan = (
+                verification_plan_response.structured_content
+                if hasattr(verification_plan_response, "structured_content")
+                else self._safe_json_parse(verification_plan_response.content)
+            )
+
             # Execute verification steps using tools
             flutter_version = await self.flutter_cli.execute("--version")
             doctor_status = await self.flutter_cli.execute("doctor")
             # Analyze results (LLM-driven)
-            analysis = await self.llm_provider.generate_response(
+            analysis_response = await self.llm_provider.generate_response(
                 f"Analyze Flutter version: {flutter_version.get('output')} and doctor: {doctor_status.get('output')}. "
                 "What issues exist and what should be fixed?"
+            )
+            analysis = (
+                analysis_response.structured_content
+                if hasattr(analysis_response, "structured_content")
+                else self._safe_json_parse(analysis_response.content)
             )
             return ExecutionResult(
                 success=True,
@@ -685,6 +562,31 @@ IMPORTANT:
         """
 
         return await self.execute(task, context)
+
+    def _safe_json_parse(self, content: str) -> dict:
+        """Safely parse JSON content using the enhanced parser."""
+        try:
+            # First try standard JSON parsing
+            return json.loads(content)
+        except json.JSONDecodeError:
+            # Try to extract JSON from the content
+            try:
+                import re
+
+                json_match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group(1))
+
+                # Try to find JSON object in the text
+                json_match = re.search(r"({.*})", content, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group(1))
+
+                self.logger.warning(f"Could not extract JSON from content")
+                return {"content": content, "tool_calls": []}
+            except Exception as e:
+                self.logger.warning(f"Failed to parse JSON content: {e}")
+                return {"content": content, "tool_calls": []}
 
     # Helper methods
     def _extract_architecture_files_from_response(

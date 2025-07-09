@@ -6,6 +6,7 @@ This implementation ensures comprehensive logging of all operations for
 universal coverage across all swarms (FlutterSwarm, PythonSwarm, etc.).
 """
 
+import json
 import logging
 import os
 from datetime import datetime
@@ -276,26 +277,26 @@ class TaskContinuation:
         """Create a detailed prompt to continue incomplete work"""
         prompt = f"""
         URGENT CONTINUATION TASK for {agent_name}:
-        
+
         Your previous work was incomplete. Here's the detailed analysis:
-        
+
         MISSING DELIVERABLES: {incomplete_work.get('missing_items', [])}
         TRUNCATION INDICATORS: {incomplete_work.get('truncation_indicators', [])}
         CODE ISSUES: {incomplete_work.get('code_issues', [])}
         COMPLETION STATUS: {incomplete_work.get('completion_percentage', 0):.1f}%
-        
+
         """
 
         # Add specific instructions based on issues found
         if incomplete_work.get("truncation_indicators"):
             prompt += """
-        CRITICAL: Your previous output was truncated mid-sentence/mid-code. 
+        CRITICAL: Your previous output was truncated mid-sentence/mid-code.
         You MUST complete the code that was cut off and continue until ALL deliverables are complete.
         """
 
         if incomplete_work.get("code_issues"):
             prompt += """
-        CODE QUALITY ISSUES DETECTED: 
+        CODE QUALITY ISSUES DETECTED:
         Please fix these specific issues and complete all incomplete code structures.
         """
 
@@ -315,17 +316,17 @@ class TaskContinuation:
 
                 if existing_files:
                     prompt += f"""
-        
+
         CURRENT PROJECT STATE:
         Existing files: {existing_files}
-        
+
         Please read these files and build upon them. DO NOT recreate existing work.
         """
             except:
                 pass
 
         prompt += """
-        
+
         COMPLETION REQUIREMENTS:
         1. Complete ALL missing deliverables
         2. Fix ALL truncated/incomplete code
@@ -333,7 +334,7 @@ class TaskContinuation:
         4. Verify ALL imports resolve correctly
         5. Use file_system tool to write COMPLETE files
         6. DO NOT stop until everything is finished
-        
+
         CRITICAL: Continue working until you have addressed every single issue listed above.
         """
 
@@ -1934,25 +1935,14 @@ class FlutterSwarm(BaseSwarm):
 
     async def _parse_and_execute_code(self, agent_output: str):
         """
-        Parse and execute Python code blocks from agent output.
-
-        Args:
-            agent_output: The agent's string output containing potential Python code blocks
+        Parse and execute Python code blocks from agent output, supporting both JSON and markdown formats.
         """
-        import asyncio
+        import json
         import re
 
-        # Extract Python code blocks using regex
-        code_pattern = r"```python\s*\n(.*?)\n```"
-        code_blocks = re.findall(code_pattern, agent_output, re.DOTALL)
+        self.logger.info(f"Parsing agent output for execution: {agent_output[:500]}...")
 
-        if not code_blocks:
-            self.logger.debug("No Python code blocks found in agent output")
-            return
-
-        self.logger.info(f"Found {len(code_blocks)} Python code blocks to execute")
-
-        # Create globals dictionary with tool mappings - use sync versions
+        # Create globals dictionary with tool mappings
         execution_globals = {
             "file_system": self._sync_file_system_wrapper,
             "flutter_cli": self._sync_flutter_cli_wrapper,
@@ -1960,25 +1950,74 @@ class FlutterSwarm(BaseSwarm):
             "__builtins__": __builtins__,
         }
 
-        # Execute each code block
-        for i, code_block in enumerate(code_blocks):
-            try:
-                self.logger.info(f"Executing code block {i + 1}/{len(code_blocks)}")
-                self.logger.debug(f"Code block content:\n{code_block}")
+        # Try parsing as JSON first
+        try:
+            # Handle cases where the output might be a JSON string within a markdown block
+            if agent_output.strip().startswith("```json"):
+                agent_output = agent_output.strip()[7:-4].strip()
 
-                # Clean up the code block (remove extra whitespace)
-                cleaned_code = code_block.strip()
+            data = json.loads(agent_output)
+            self.logger.info("Successfully parsed agent output as JSON.")
 
-                # Execute the code block
-                exec(cleaned_code, execution_globals)
+            # If JSON is a list of operations, iterate through them
+            if isinstance(data, list):
+                operations = data
+            else:
+                operations = [data]
 
-                self.logger.info(f"Successfully executed code block {i + 1}")
+            for i, op in enumerate(operations):
+                tool_name = op.get("tool")
+                action = op.get("action")
+                params = op.get("parameters", {})
 
-            except Exception as e:
-                self.logger.error(f"Error executing code block {i + 1}: {str(e)}")
-                self.logger.error(f"Code block that failed:\n{code_block}")
-                # Continue with other code blocks even if one fails
-                continue
+                if tool_name and action:
+                    self.logger.info(
+                        f"Executing operation {i+1}/{len(operations)}: {tool_name}.{action}"
+                    )
+
+                    # Construct the function call string
+                    # Example: file_system(operation='write', path='lib/main.dart', content='...')
+                    param_str = ", ".join([f"{k}='''{v}'''" for k, v in params.items()])
+                    code_to_execute = f"{tool_name}(operation='{action}', {param_str})"
+
+                    try:
+                        self.logger.debug(f"Executing code: {code_to_execute}")
+                        exec(code_to_execute, execution_globals)
+                        self.logger.info(f"Successfully executed operation {i+1}")
+                    except Exception as e:
+                        self.logger.error(f"Error executing operation {i+1}: {e}")
+                        self.logger.error(f"Failed code: {code_to_execute}")
+
+            return
+
+        except json.JSONDecodeError:
+            self.logger.warning(
+                "Agent output is not valid JSON, falling back to markdown parsing."
+            )
+            # Fallback to regex for markdown code blocks if JSON parsing fails
+            code_pattern = r"```python\s*\n(.*?)\n```"
+            code_blocks = re.findall(code_pattern, agent_output, re.DOTALL)
+
+            if not code_blocks:
+                self.logger.debug("No Python code blocks found in agent output")
+                return
+
+            self.logger.info(f"Found {len(code_blocks)} Python code blocks to execute")
+
+            for i, code_block in enumerate(code_blocks):
+                try:
+                    self.logger.info(f"Executing code block {i + 1}/{len(code_blocks)}")
+                    self.logger.debug(f"Code block content:\n{code_block}")
+
+                    cleaned_code = code_block.strip()
+                    exec(cleaned_code, execution_globals)
+
+                    self.logger.info(f"Successfully executed code block {i + 1}")
+
+                except Exception as e:
+                    self.logger.error(f"Error executing code block {i + 1}: {str(e)}")
+                    self.logger.error(f"Code block that failed:\n{code_block}")
+                    continue
 
     def _sync_file_system_wrapper(self, **kwargs):
         """Synchronous wrapper for file system operations."""
@@ -2255,19 +2294,210 @@ class FlutterSwarm(BaseSwarm):
                 context[action] = result
         return result
 
+    async def _extract_tool_calls_from_response(self, response):
+        """Extract tool calls from agent response, supporting both JSON and text formats."""
+        tool_calls = []
+
+        if isinstance(response, dict):
+            # Handle JSON response directly
+            if "tool_calls" in response and isinstance(response["tool_calls"], list):
+                return response["tool_calls"]
+
+            # Check if content contains tool_calls
+            if "content" in response and isinstance(response["content"], dict):
+                if "tool_calls" in response["content"] and isinstance(
+                    response["content"]["tool_calls"], list
+                ):
+                    return response["content"]["tool_calls"]
+
+        elif isinstance(response, str):
+            # Try to parse JSON from string
+            try:
+                parsed = json.loads(response)
+                if "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
+                    return parsed["tool_calls"]
+            except json.JSONDecodeError:
+                # Not JSON, try to extract tool calls from markdown format
+                pass
+
+        return tool_calls
+
+    async def _extract_tool_calls_from_response(self, response):
+        """Extract tool calls from agent response, supporting both JSON and text formats."""
+        tool_calls = []
+
+        if isinstance(response, dict):
+            # Handle JSON response directly
+            if "tool_calls" in response and isinstance(response["tool_calls"], list):
+                return response["tool_calls"]
+
+            # Check if content contains tool_calls
+            if "content" in response and isinstance(response["content"], dict):
+                if "tool_calls" in response["content"] and isinstance(
+                    response["content"]["tool_calls"], list
+                ):
+                    return response["content"]["tool_calls"]
+
+        elif isinstance(response, str):
+            # Try to parse JSON from string
+            try:
+                parsed = json.loads(response)
+                if "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
+                    return parsed["tool_calls"]
+            except json.JSONDecodeError:
+                # Not JSON, try to extract tool calls from markdown format
+                pass
+
+    async def _extract_tool_calls_from_response(self, response):
+        """Extract tool calls from agent response, supporting both JSON and text formats."""
+        tool_calls = []
+
+        if isinstance(response, dict):
+            # Handle JSON response directly
+            if "tool_calls" in response and isinstance(response["tool_calls"], list):
+                return response["tool_calls"]
+
+            # Check if content contains tool_calls
+            if "content" in response and isinstance(response["content"], dict):
+                if "tool_calls" in response["content"] and isinstance(
+                    response["content"]["tool_calls"], list
+                ):
+                    return response["content"]["tool_calls"]
+
+        elif isinstance(response, str):
+            # Try to parse JSON from string
+            try:
+                parsed = json.loads(response)
+                if "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
+                    return parsed["tool_calls"]
+            except json.JSONDecodeError:
+                # Not JSON, try to extract tool calls from markdown format
+                pass
+
+        return tool_calls
+
+    async def _process_tool_calls_from_response(
+        self, response: Dict[str, Any]
+    ) -> List[str]:
+        """Process tool calls from agent response and execute them."""
+        created_files = []
+
+        try:
+            # Extract tool calls from response
+            tool_calls = await self._extract_tool_calls_from_response(response)
+
+            if not tool_calls:
+                self.logger.debug("No tool calls found in response")
+                return created_files
+
+            self.logger.info(
+                f"Processing {len(tool_calls)} tool calls from agent response"
+            )
+
+            # Execute each tool call
+            for i, tool_call in enumerate(tool_calls):
+                try:
+                    tool_name = tool_call.get("name")
+                    arguments = tool_call.get("arguments", {})
+
+                    if tool_name == "file_system":
+                        operation = arguments.get("operation")
+                        path = arguments.get("path")
+                        content = arguments.get("content", "")
+
+                        if operation == "write" and path:
+                            self.logger.info(f"Executing file_system write: {path}")
+
+                            # Execute the file write immediately using the tool instance
+                            result = await self.file_system_instance.write_file(
+                                path=path,
+                                content=content,
+                                encoding=arguments.get("encoding", "utf-8"),
+                                create_dirs=arguments.get("create_dirs", True),
+                            )
+
+                            if result.get("success", False):
+                                created_files.append(path)
+                                self.logger.info(f"Successfully created file: {path}")
+                            else:
+                                self.logger.error(
+                                    f"Failed to create file {path}: {result.get('error', 'Unknown error')}"
+                                )
+
+                        elif operation == "mkdir" and path:
+                            self.logger.info(f"Executing file_system mkdir: {path}")
+
+                            # Execute directory creation
+                            result = await self.file_system_instance.create_directory(
+                                path=path
+                            )
+
+                            if result.get("success", False):
+                                self.logger.info(
+                                    f"Successfully created directory: {path}"
+                                )
+                            else:
+                                self.logger.error(
+                                    f"Failed to create directory {path}: {result.get('error', 'Unknown error')}"
+                                )
+
+                    elif tool_name == "flutter_cli":
+                        command = arguments.get("command")
+                        args = arguments.get("args", [])
+
+                        if command:
+                            self.logger.info(f"Executing flutter_cli: {command} {args}")
+                            result = await self.flutter_cli_instance.execute(
+                                command, args
+                            )
+                            self.logger.info(
+                                f"Flutter CLI result: {result.get('success', False)}"
+                            )
+
+                    elif tool_name == "dart_cli":
+                        command = arguments.get("command")
+                        args = arguments.get("args", [])
+
+                        if command:
+                            self.logger.info(f"Executing dart_cli: {command} {args}")
+                            result = await self.dart_cli_instance.execute(command, args)
+                            self.logger.info(
+                                f"Dart CLI result: {result.get('success', False)}"
+                            )
+
+                    else:
+                        self.logger.warning(f"Unknown tool call: {tool_name}")
+
+                except Exception as e:
+                    self.logger.error(f"Error executing tool call {i+1}: {str(e)}")
+                    continue
+
+            self.logger.info(
+                f"Tool call processing complete. Created {len(created_files)} files: {created_files}"
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error processing tool calls from response: {str(e)}")
+
+        return created_files
+
     async def ensure_agent_work_completion(
-        self,
-        agent_name: str,
-        agent_result: ExecutionResult,
-        expected_deliverables: list,
-        enhanced_context: dict,
-    ) -> ExecutionResult:
-        """
-        Ensure agent work is fully complete using recursive continuation.
-        This is the core fix for the completion problem.
-        """
+        self, agent_name, agent_result, expected_deliverables, enhanced_context
+    ):
+        """Ensure agent work is complete, using recursive continuations if necessary."""
         if not agent_result.success:
             return agent_result
+
+        # Process tool calls from the agent response immediately
+        created_files = await self._process_tool_calls_from_response(
+            agent_result.output
+        )
+
+        # Log the files created from tool calls
+        if created_files:
+            self.logger.info(
+                f"Agent {agent_name} created {len(created_files)} files via tool calls: {created_files}"
+            )
 
         # Extract output text
         output_text = ""
@@ -2282,7 +2512,7 @@ class FlutterSwarm(BaseSwarm):
             else:
                 output_text = str(agent_result.output)
 
-        # Parse and execute initial code
+        # Parse and execute initial code (fallback method)
         if output_text:
             await self._parse_and_execute_code(output_text)
 
@@ -2295,6 +2525,7 @@ class FlutterSwarm(BaseSwarm):
         max_continuations = 5
         continuation_count = 0
         last_successful_output = output_text
+        all_created_files = created_files.copy()
 
         while continuation_count < max_continuations:
             incompleteness_check = self.task_continuation.detect_incomplete_work(
@@ -2352,13 +2583,19 @@ class FlutterSwarm(BaseSwarm):
             )
 
             if continuation_result.success:
+                # Process tool calls from continuation response
+                continuation_created_files = (
+                    await self._process_tool_calls_from_response(
+                        continuation_result.output
+                    )
+                )
+                all_created_files.extend(continuation_created_files)
+
                 # Parse and execute continuation code
                 continuation_output = str(continuation_result.output)
                 if continuation_output:
                     await self._parse_and_execute_code(continuation_output)
-                    last_successful_output = (
-                        continuation_output  # Update for next iteration
-                    )
+                    last_successful_output = continuation_output
 
                 # Update memory with continuation results
                 self.shared_memory.update_memory(
@@ -2366,6 +2603,13 @@ class FlutterSwarm(BaseSwarm):
                     continuation_result.output,
                     enhanced_context,
                 )
+
+                # Log continuation results
+                if continuation_created_files:
+                    self.logger.info(
+                        f"Continuation {continuation_count} created {len(continuation_created_files)} files: {continuation_created_files}"
+                    )
+
             else:
                 self.logger.error(
                     f"{agent_name} continuation {continuation_count} failed: {continuation_result.error_message}"
@@ -2381,7 +2625,16 @@ class FlutterSwarm(BaseSwarm):
                 error_message=f"Agent {agent_name} could not complete work after {max_continuations} attempts",
                 agent_name=agent_name,
                 task_id="ensure_completion",
+                metadata={"created_files": all_created_files},
             )
+
+        # Update the original result with created files metadata
+        if hasattr(agent_result, "metadata") and isinstance(
+            agent_result.metadata, dict
+        ):
+            agent_result.metadata["created_files"] = all_created_files
+        else:
+            agent_result.metadata = {"created_files": all_created_files}
 
         # Return the original result (now with completed work)
         return agent_result

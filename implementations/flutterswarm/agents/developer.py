@@ -82,172 +82,59 @@ class FlutterDeveloperAgent(AbstractDeveloperAgent):
 
     def _get_specialized_instructions(self) -> str:
         """Flutter-specific instructions - all knowledge comes from LLM"""
-        return """You are an expert Flutter developer with comprehensive knowledge of:
+        return """You are an expert Flutter developer. Respond ONLY in valid JSON format.
 
-FLUTTER FRAMEWORK:
-- Widget system (StatelessWidget, StatefulWidget, InheritedWidget)
-- Layout widgets (Container, Column, Row, Stack, Positioned, etc.)
-- Material Design and Cupertino widgets
-- Custom widgets and widget composition
-- Widget lifecycle and state management
-- Build context and element tree
-
-DART LANGUAGE:
-- Dart syntax, features, and best practices
-- Async/await and Future/Stream patterns
-- Mixins, extensions, and advanced features
-- Null safety and sound null safety
-- Generic types and collections
-
-STATE MANAGEMENT:
-- Provider pattern and package
-- Riverpod for dependency injection
-- BLoC pattern and flutter_bloc
-- GetX for state and navigation
-- setState and InheritedWidget
-- Redux and MobX patterns
-
-ARCHITECTURE PATTERNS:
-- Clean Architecture for Flutter
-- MVVM (Model-View-ViewModel)
-- MVC (Model-View-Controller)
-- Repository pattern
-- Dependency injection
-- Layered architecture
-
-NAVIGATION:
-- Navigator 1.0 and 2.0
-- Named routes and route generation
-- Nested navigation
-- Deep linking
-- Platform-specific navigation
-
-PLATFORM INTEGRATION:
-- Method channels for native code
-- Platform-specific implementations
-- iOS and Android integration
-- Desktop support (Windows, macOS, Linux)
-- Web deployment considerations
-
-PERFORMANCE:
-- Widget optimization techniques
-- Avoiding unnecessary rebuilds
-- Memory management
-- Image optimization
-- Build performance
-
-TESTING:
-- Unit testing with test package
-- Widget testing with flutter_test
-- Integration testing with integration_test
-- Mock testing and test doubles
-- Golden tests for UI consistency
-
-DEVELOPMENT TOOLS:
-- Flutter DevTools for debugging
-- Hot reload and hot restart
-- Performance profiling
-- Memory leak detection
-- Network monitoring
-
-IMPORTANT INSTRUCTIONS:
-1. Use your comprehensive Flutter knowledge to make ALL decisions
-2. Choose appropriate widgets, patterns, and architectures
-3. Follow Flutter and Dart best practices
-4. Write clean, maintainable, performant code
-5. Add comprehensive error handling
-6. Include detailed comments explaining Flutter concepts
-7. Consider platform differences (iOS/Android/Web/Desktop)
-8. Optimize for performance and user experience
-
-When generating Flutter code:
-- Always use latest Flutter/Dart features when appropriate
-- Follow material design or cupertino design guidelines
-- Implement proper state management
-- Handle loading states and errors gracefully
-- Consider accessibility
-- Write testable code
-- Use appropriate file structure and naming conventions
-
-You have access to CLI tools for Flutter/Dart commands and file operations.
-Use these tools to execute the plans you create.
-
-MANDATORY TOOL USAGE:
-- You MUST use the file_system tool to create all files and directories
-- Use file_system with operation='mkdir' to create directories
-- Use file_system with operation='write' to create files with complete content
-- DO NOT just show code examples - ACTUALLY CREATE the files using tools
-- Every code block you generate must be written to a file using the file_system tool
-- Always create parent directories before creating files in them
-- Include the COMPLETE file content, not just snippets
-
-REQUIRED ACTIONS FOR EVERY TASK:
-1. Create all necessary directories using file_system tool
-2. Write all code to files using file_system tool
-3. List all created files at the end of your response
-4. Confirm files were actually written by checking the tool results
-
-CRITICAL: You must wrap ALL file_system calls in Python code blocks like this:
-
-```python
-file_system(operation='mkdir', path='lib/screens')
-file_system(operation='write', path='lib/main.dart', content='''
-import 'package:flutter/material.dart';
-
-void main() {
-  runApp(MyApp());
+REQUIRED JSON STRUCTURE:
+{
+  "content": "Your main response content",
+  "reasoning": "Your reasoning (optional)",
+  "tool_calls": [
+    {
+      "name": "file_system",
+      "arguments": {
+        "operation": "write",
+        "path": "lib/screens/home_screen.dart",
+        "content": "complete file content with no truncation"
+      }
+    }
+  ]
 }
 
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: Text('My App')),
-        body: Center(child: Text('Hello World')),
-      ),
-    );
+CRITICAL FILE CREATION REQUIREMENTS:
+1. You MUST use the file_system tool to create ALL files
+2. You MUST provide COMPLETE file content - no truncation allowed
+3. You MUST create complete, syntactically correct Dart code
+4. You MUST include all necessary imports
+5. You MUST implement complete widget classes with all required methods
+6. NEVER use placeholder comments like "// TODO" or "// Add more code"
+7. Every file must be complete and ready to run
+
+FILE SYSTEM TOOL USAGE:
+- Use "operation": "mkdir" to create directories
+- Use "operation": "write" to create files with complete content
+- Always provide the full path from project root
+- Include complete file content in the "content" field
+
+FLUTTER EXPERTISE:
+- Widget system and state management
+- UI/UX implementation
+- Navigation and routing
+- Data handling and persistence
+- Platform-specific code
+- Performance optimization
+- Testing and debugging
+
+EXAMPLE COMPLETE FILE:
+{
+  "name": "file_system",
+  "arguments": {
+    "operation": "write",
+    "path": "lib/screens/home_screen.dart",
+    "content": "import 'package:flutter/material.dart';\\n\\nclass HomeScreen extends StatefulWidget {\\n  @override\\n  _HomeScreenState createState() => _HomeScreenState();\\n}\\n\\nclass _HomeScreenState extends State<HomeScreen> {\\n  @override\\n  Widget build(BuildContext context) {\\n    return Scaffold(\\n      appBar: AppBar(\\n        title: Text('Home'),\\n      ),\\n      body: Center(\\n        child: Text('Hello World'),\\n      ),\\n    );\\n  }\\n}"
   }
 }
-''')
-```
 
-CRITICAL FILE COMPLETION REQUIREMENTS:
-- NEVER truncate code - ALWAYS provide COMPLETE file content from start to finish
-- If you run out of space in your response, create multiple Python code blocks
-- Each file MUST compile successfully - test your code mentally before writing
-- NEVER leave incomplete methods, classes, or statements
-- ALWAYS close all brackets, braces, and quotes properly
-- Include ALL necessary imports at the top of each file
-
-RESPONSIVE UI REQUIREMENTS:
-- ALWAYS use SingleChildScrollView for scrollable content
-- Use MediaQuery.of(context).size for responsive sizing
-- Set constraints with BoxConstraints for minimum/maximum sizes
-- Consider different screen sizes and orientations
-- Use Flexible, Expanded, or Wrap widgets for responsive layouts
-
-DEPENDENCY MANAGEMENT:
-- ALWAYS update pubspec.yaml with required dependencies
-- Common dependencies to add: provider, cupertino_icons
-- Use file_system to update pubspec.yaml when adding packages
-
-COMPLETE IMPLEMENTATION CHECKLIST:
-1. Create ALL directories first
-2. Create pubspec.yaml with ALL dependencies
-3. Create main.dart with proper imports
-4. Create ALL imported files (screens, widgets, models, etc.)
-5. Ensure ALL imports resolve correctly
-6. Test that every file is complete and syntactically correct
-7. Verify responsive design principles are applied
-
-IMPORTANT:
-- ALWAYS put file_system calls inside ```python code blocks
-- ALWAYS provide the COMPLETE file content, not snippets
-- ALWAYS create directories before creating files in them
-- NEVER leave any imports unresolved
-- ALWAYS ensure UI is responsive and scrollable
-"""
+MANDATORY: Every response must include tool_calls array with file_system operations to create actual files."""
 
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get tools for this agent - properly formatted for function calling"""
@@ -538,11 +425,33 @@ IMPORTANT:
             # Parse the response to get directory structure
             structure_plan = {"directories": []}  # Default fallback
             try:
-                import json
+                # Use structured JSON response if available
+                if hasattr(structure_response, "structured_content"):
+                    structure_plan = structure_response.structured_content
+                    # Ensure it has the expected structure
+                    if "directories" not in structure_plan:
+                        structure_plan["directories"] = []
+                elif (
+                    hasattr(structure_response, "json_response")
+                    and structure_response.json_response
+                ):
+                    structure_plan = structure_response.json_response
+                    if "directories" not in structure_plan:
+                        structure_plan["directories"] = []
+                else:
+                    # Fallback to parsing content directly with error handling
+                    import json
 
-                structure_plan = json.loads(structure_response.content)
-            except:
+                    try:
+                        structure_plan = json.loads(structure_response.content)
+                    except json.JSONDecodeError as e:
+                        # Use the parse_json_response function for better error handling
+                        from ...llm.providers import parse_json_response
+
+                        structure_plan = parse_json_response(structure_response.content)
+            except Exception as e:
                 # If parsing fails, use default
+                self.logger.warning(f"Failed to parse structure plan: {e}")
                 structure_plan = {"directories": []}
 
             for directory in structure_plan.get("directories", []):
@@ -575,7 +484,7 @@ IMPORTANT:
                 [
                     {
                         "role": "user",
-                        "content": f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed?",
+                        "content": f"How should I validate these Flutter dependencies: {dependencies}? What compatibility checks are needed? Respond with JSON containing your analysis and recommendations.",
                     }
                 ]
             )
@@ -586,11 +495,25 @@ IMPORTANT:
                     [
                         {
                             "role": "user",
-                            "content": f"Is {dependency} compatible? pub info: {pub_info.get('output')}",
+                            "content": f"Is {dependency} compatible? pub info: {pub_info.get('output')}. Respond with JSON containing compatibility assessment.",
                         }
                     ]
                 )
-                results[dependency] = compatibility_response.content
+                # Use structured JSON response if available
+                if hasattr(compatibility_response, "structured_content"):
+                    results[dependency] = compatibility_response.structured_content
+                elif (
+                    hasattr(compatibility_response, "json_response")
+                    and compatibility_response.json_response
+                ):
+                    results[dependency] = compatibility_response.json_response
+                else:
+                    # Use structured content or parse JSON
+                    results[dependency] = (
+                        compatibility_response.structured_content
+                        if hasattr(compatibility_response, "structured_content")
+                        else self._safe_json_parse(compatibility_response.content)
+                    )
             return ExecutionResult(success=True, result=results)
         except Exception as e:
             self.logger.error(f"Dependency validation failed: {e}")
@@ -600,3 +523,14 @@ IMPORTANT:
                 agent_name=self.name,
                 task_id="validate_dependencies",
             )
+
+    def _safe_json_parse(self, content: str) -> dict:
+        """Safely parse JSON content using the enhanced parser."""
+        try:
+            from multiagenticswarm.llm.providers import parse_json_response
+
+            return parse_json_response(content)
+        except Exception as e:
+            self.logger.warning(f"Failed to parse JSON content: {e}")
+            # Return a proper error structure instead of fallback
+            raise ValueError(f"Invalid JSON response: {str(e)}")

@@ -258,13 +258,27 @@ Your core responsibilities:
                 )
 
                 # Handle tool calls if present
+                tool_calls_to_execute = []
+
+                # Check for tool calls in different formats
                 if hasattr(result, "tool_calls") and result.tool_calls:
-                    self.logger.info(f"Processing {len(result.tool_calls)} tool calls")
-                    tool_results = await self._execute_tool_calls(result.tool_calls)
+                    tool_calls_to_execute = result.tool_calls
+                elif isinstance(result, dict) and "tool_calls" in result:
+                    tool_calls_to_execute = result["tool_calls"]
+
+                if tool_calls_to_execute:
+                    self.logger.info(
+                        f"Processing {len(tool_calls_to_execute)} tool calls"
+                    )
+                    tool_results = await self._execute_tool_calls(tool_calls_to_execute)
 
                     # Add tool results to the response
                     if hasattr(result, "content"):
                         result.content += f"\n\nTool execution results: {tool_results}"
+                    elif isinstance(result, dict) and "output" in result:
+                        result[
+                            "output"
+                        ] += f"\n\nTool execution results: {tool_results}"
                     else:
                         result = f"{result}\n\nTool execution results: {tool_results}"
 
@@ -301,7 +315,7 @@ Your core responsibilities:
                 success=True,
                 agent_name=self.name,
                 task_id=f"{self.name}_task_{len(self.execution_history)}",
-                output=result,
+                output=self._safe_json_dumps(result),
                 execution_time=execution_time,
                 metadata={"task": task_or_input, "tools_used": len(formatted_tools)},
             )
@@ -363,9 +377,15 @@ Your core responsibilities:
                 if hasattr(tool_call, "function"):
                     # OpenAI-style tool call
                     tool_name = tool_call.function.name
-                    import json
-
-                    arguments = json.loads(tool_call.function.arguments)
+                    try:
+                        arguments = json.loads(tool_call.function.arguments)
+                    except (json.JSONDecodeError, AttributeError):
+                        # If arguments is already a dict or not valid JSON
+                        arguments = (
+                            tool_call.function.arguments
+                            if hasattr(tool_call.function, "arguments")
+                            else {}
+                        )
                     tool_call_id = getattr(tool_call, "id", None)
                 elif isinstance(tool_call, dict):
                     # Dictionary-style tool call
@@ -374,9 +394,32 @@ Your core responsibilities:
                     ).get("name")
                     arguments = tool_call.get("arguments", {})
                     tool_call_id = tool_call.get("id")
+                elif hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
+                    # ToolCallRequest object
+                    tool_name = tool_call.name
+                    arguments = tool_call.arguments
+                    if isinstance(arguments, str):
+                        try:
+                            arguments = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            pass  # Keep as string if not JSON
+                    tool_call_id = getattr(tool_call, "id", None)
                 else:
                     self.logger.warning(f"Unknown tool call format: {type(tool_call)}")
                     continue
+
+                # Make sure arguments is a dict
+                if not isinstance(arguments, dict):
+                    self.logger.warning(
+                        f"Arguments is not a dict, converting: {arguments}"
+                    )
+                    if isinstance(arguments, str):
+                        try:
+                            arguments = json.loads(arguments)
+                        except json.JSONDecodeError:
+                            arguments = {"value": arguments}
+                    else:
+                        arguments = {"value": arguments}
 
                 # Find the tool function
                 tool_func = None
@@ -429,6 +472,20 @@ Your core responsibilities:
                 )
 
         return results
+
+    def _safe_json_dumps(self, obj):
+        """Safely serialize objects to JSON, handling ToolCallRequest objects."""
+        import json  # Import here to avoid any scoping issues
+
+        try:
+            # Import the custom encoder
+            from multiagenticswarm.core.base_tool import JSONEncoder
+
+            return json.dumps(obj, cls=JSONEncoder)
+        except (TypeError, ValueError) as e:
+            # Fallback to string representation if JSON serialization fails
+            self.logger.warning(f"Failed to serialize object to JSON: {e}")
+            return str(obj)
 
     @abstractmethod
     def _get_specialized_instructions(self) -> str:

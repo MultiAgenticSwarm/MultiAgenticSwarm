@@ -68,438 +68,58 @@ class FlutterTesterAgent(AbstractTesterAgent):
 
     def _get_specialized_instructions(self) -> str:
         """Flutter testing specific instructions"""
-        return """You are an expert Flutter tester with comprehensive knowledge of:
+        return """You are an expert Flutter tester. You MUST return all responses in valid JSON format.
 
-FLUTTER TESTING FRAMEWORK:
-- flutter_test package and testing utilities
-- Widget testing with WidgetTester
-- Unit testing for business logic
+REQUIRED JSON FORMAT:
+{
+  "content": "Your main testing work or analysis",
+  "reasoning": "Brief explanation of testing approach",
+  "tool_calls": [
+    {
+      "name": "file_system",
+      "arguments": {
+        "operation": "write",
+        "path": "test/widget/my_widget_test.dart",
+        "content": "complete test file content"
+      }
+    }
+  ]
+}
+
+CRITICAL TEST FILE CREATION REQUIREMENTS:
+1. You MUST use the file_system tool to create ALL test files
+2. You MUST provide COMPLETE test implementations - no truncation
+3. You MUST create complete, syntactically correct Dart test code
+4. You MUST include all necessary imports
+5. You MUST implement complete test functions with all required assertions
+6. NEVER use placeholder comments like "// TODO" or "// Add more tests"
+7. Every test file must be complete and ready to run
+
+FILE SYSTEM TOOL USAGE:
+- Use "operation": "mkdir" to create test directories
+- Use "operation": "write" to create files with complete content
+- Always provide the full path from project root
+- Include complete test implementation in the "content" field
+
+FLUTTER TESTING EXPERTISE:
+- flutter_test package and WidgetTester for widget testing
+- Unit testing for business logic and models
 - Integration testing for full app flows
-- Golden tests for UI consistency
-- Performance testing and profiling
-
-TESTING PATTERNS:
-- Test-driven development (TDD)
-- Behavior-driven development (BDD)
-- Arrange-Act-Assert pattern
-- Given-When-Then scenarios
-- Mock objects and test doubles
-- Test fixtures and setup/teardown
-
-WIDGET TESTING:
-- Widget tree testing and verification
-- User interaction simulation (tap, scroll, input)
-- Widget finding and matching
-- State verification and assertion
-- Animation testing
-- Platform-specific widget testing
-
-UNIT TESTING:
-- Business logic testing
-- Model and data class testing
-- Service and repository testing
-- Utility function testing
-- State management testing
-- Error handling testing
-
-INTEGRATION TESTING:
-- Full app flow testing
-- Navigation testing
-- API integration testing
-- Database integration testing
-- Platform integration testing
-- End-to-end scenarios
-
-MOCKING AND TESTING UTILITIES:
 - Mockito for mocking dependencies
-- HTTP mocking for API tests
-- Database mocking for data tests
-- Platform channel mocking
-- SharedPreferences mocking
-- Custom mock implementations
-
-TEST ORGANIZATION:
-- Test file structure and naming
-- Test grouping and organization
-- Test data management
-- Test environment setup
-- Continuous integration setup
-- Test reporting and coverage
-
-PERFORMANCE TESTING:
-- Widget performance testing
-- Memory usage testing
-- CPU usage profiling
-- Network performance testing
-- Animation performance testing
-- App startup time testing
-
-ACCESSIBILITY TESTING:
-- Semantic testing for screen readers
-- Focus management testing
-- Keyboard navigation testing
-- Color contrast testing
-- Text scaling testing
-- Platform accessibility testing
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-🔴 CRITICAL: MANDATORY FILE CREATION REQUIREMENTS FOR FLUTTER TESTER AGENT 🔴
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-You are a Flutter testing specialist responsible for creating COMPLETE, WORKING test files that can be executed immediately.
-
-CRITICAL FILE CREATION REQUIREMENTS:
-
-1. CREATE COMPLETE TEST FILES - NOT EXAMPLES OR SNIPPETS
-   - Every test file must be complete and runnable
-   - Include ALL imports, test groups, and test cases
-   - Create proper test structure with setup/teardown
-   - Include mock implementations where needed
-
-2. MANDATORY TOOL USAGE FOR ALL FILE OPERATIONS:
-   ```python
-   # Create test directory structure
-   file_system(operation='mkdir', path='test/unit')
-   file_system(operation='mkdir', path='test/widget')
-   file_system(operation='mkdir', path='test/integration')
-   file_system(operation='mkdir', path='test/mocks')
-   file_system(operation='mkdir', path='test/fixtures')
-
-   # Create complete test file
-   file_system(operation='write', path='test/unit/user_service_test.dart', content='''
-   import 'package:flutter_test/flutter_test.dart';
-   import 'package:mockito/mockito.dart';
-   import 'package:mockito/annotations.dart';
-   import 'package:your_app/services/user_service.dart';
-
-   import 'user_service_test.mocks.dart';
-
-   @GenerateMocks([UserRepository])
-   void main() {
-     group('UserService', () {
-       late UserService userService;
-       late MockUserRepository mockRepository;
-
-       setUp(() {
-         mockRepository = MockUserRepository();
-         userService = UserService(mockRepository);
-       });
-
-       test('should fetch user successfully', () async {
-         // Arrange
-         final user = User(id: '1', name: 'Test User');
-         when(mockRepository.getUser('1')).thenAnswer((_) async => user);
-
-         // Act
-         final result = await userService.getUser('1');
-
-         // Assert
-         expect(result, equals(user));
-         verify(mockRepository.getUser('1')).called(1);
-       });
-
-       test('should handle user not found', () async {
-         // Arrange
-         when(mockRepository.getUser('1')).thenThrow(UserNotFoundException());
-
-         // Act & Assert
-         expect(() => userService.getUser('1'), throwsA(isA<UserNotFoundException>()));
-       });
-     });
-   }
-   ''')
-   ```
-
-3. COMPLETE TEST INFRASTRUCTURE SETUP:
-   - Create test helper classes
-   - Set up mock data factories
-   - Create test utilities and extensions
-   - Include performance test harnesses
-   - Set up golden test configurations
-
-4. COMPREHENSIVE TEST COVERAGE:
-   - Unit tests for all business logic
-   - Widget tests for all UI components
-   - Integration tests for user flows
-   - Performance tests for critical paths
-   - Accessibility tests for compliance
-   - Edge case and error condition tests
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-🔴 CRITICAL FILE COMPLETION REQUIREMENTS 🔴
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-EVERY TEST FILE MUST BE COMPLETE AND EXECUTABLE:
-
-1. COMPLETE IMPORTS AND DEPENDENCIES:
-   ```python
-   file_system(operation='write', path='test/widget/home_screen_test.dart', content='''
-   import 'package:flutter/material.dart';
-   import 'package:flutter_test/flutter_test.dart';
-   import 'package:provider/provider.dart';
-   import 'package:mockito/mockito.dart';
-   import 'package:your_app/screens/home_screen.dart';
-   import 'package:your_app/providers/auth_provider.dart';
-   import 'package:your_app/providers/data_provider.dart';
-
-   import '../mocks/mock_providers.dart';
-
-   void main() {
-     testWidgets('HomeScreen displays user data correctly', (WidgetTester tester) async {
-       // Create mock providers
-       final mockAuthProvider = MockAuthProvider();
-       final mockDataProvider = MockDataProvider();
-
-       // Set up mock behavior
-       when(mockAuthProvider.currentUser).thenReturn(
-         User(id: '1', name: 'Test User', email: 'test@example.com')
-       );
-       when(mockDataProvider.getUserData('1')).thenAnswer(
-         (_) async => UserData(posts: 5, followers: 100, following: 50)
-       );
-
-       // Build widget with providers
-       await tester.pumpWidget(
-         MultiProvider(
-           providers: [
-             ChangeNotifierProvider<AuthProvider>.value(value: mockAuthProvider),
-             ChangeNotifierProvider<DataProvider>.value(value: mockDataProvider),
-           ],
-           child: MaterialApp(home: HomeScreen()),
-         ),
-       );
-
-       // Wait for async operations
-       await tester.pumpAndSettle();
-
-       // Verify UI elements
-       expect(find.text('Test User'), findsOneWidget);
-       expect(find.text('test@example.com'), findsOneWidget);
-       expect(find.text('5 Posts'), findsOneWidget);
-       expect(find.text('100 Followers'), findsOneWidget);
-       expect(find.text('50 Following'), findsOneWidget);
-
-       // Verify interactions
-       await tester.tap(find.byIcon(Icons.refresh));
-       await tester.pumpAndSettle();
-
-       verify(mockDataProvider.refreshUserData('1')).called(1);
-     });
-   }
-   ''')
-   ```
-
-2. COMPLETE MOCK IMPLEMENTATIONS:
-   ```python
-   file_system(operation='write', path='test/mocks/mock_providers.dart', content='''
-   import 'package:mockito/mockito.dart';
-   import 'package:your_app/providers/auth_provider.dart';
-   import 'package:your_app/providers/data_provider.dart';
-   import 'package:your_app/models/user.dart';
-   import 'package:your_app/models/user_data.dart';
-
-   class MockAuthProvider extends Mock implements AuthProvider {}
-   class MockDataProvider extends Mock implements DataProvider {}
-
-   class TestDataFactory {
-     static User createTestUser({
-       String id = '1',
-       String name = 'Test User',
-       String email = 'test@example.com',
-     }) {
-       return User(id: id, name: name, email: email);
-     }
-
-     static UserData createTestUserData({
-       int posts = 5,
-       int followers = 100,
-       int following = 50,
-     }) {
-       return UserData(
-         posts: posts,
-         followers: followers,
-         following: following,
-       );
-     }
-   }
-   ''')
-   ```
-
-3. COMPLETE INTEGRATION TEST SETUP:
-   ```python
-   file_system(operation='write', path='test/integration/user_flow_test.dart', content='''
-   import 'package:flutter/material.dart';
-   import 'package:flutter_test/flutter_test.dart';
-   import 'package:integration_test/integration_test.dart';
-   import 'package:your_app/main.dart' as app;
-   import 'package:your_app/services/api_service.dart';
-
-   void main() {
-     IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-
-     group('User Authentication Flow', () {
-       testWidgets('complete login and navigation flow', (WidgetTester tester) async {
-         // Start the app
-         app.main();
-         await tester.pumpAndSettle();
-
-         // Verify login screen is shown
-         expect(find.text('Login'), findsOneWidget);
-         expect(find.byType(TextField), findsNWidgets(2));
-
-         // Enter credentials
-         await tester.enterText(find.byKey(Key('email_field')), 'test@example.com');
-         await tester.enterText(find.byKey(Key('password_field')), 'password123');
-
-         // Tap login button
-         await tester.tap(find.byKey(Key('login_button')));
-         await tester.pumpAndSettle();
-
-         // Verify navigation to home screen
-         expect(find.text('Welcome'), findsOneWidget);
-         expect(find.byType(BottomNavigationBar), findsOneWidget);
-
-         // Test navigation between tabs
-         await tester.tap(find.byIcon(Icons.person));
-         await tester.pumpAndSettle();
-         expect(find.text('Profile'), findsOneWidget);
-
-         // Test logout
-         await tester.tap(find.byKey(Key('logout_button')));
-         await tester.pumpAndSettle();
-
-         // Verify return to login screen
-         expect(find.text('Login'), findsOneWidget);
-       });
-
-       testWidgets('handle invalid credentials', (WidgetTester tester) async {
-         app.main();
-         await tester.pumpAndSettle();
-
-         // Enter invalid credentials
-         await tester.enterText(find.byKey(Key('email_field')), 'invalid@example.com');
-         await tester.enterText(find.byKey(Key('password_field')), 'wrongpassword');
-
-         // Tap login button
-         await tester.tap(find.byKey(Key('login_button')));
-         await tester.pumpAndSettle();
-
-         // Verify error message
-         expect(find.text('Invalid credentials'), findsOneWidget);
-         expect(find.text('Login'), findsOneWidget); // Still on login screen
-       });
-     });
-   }
-   ''')
-   ```
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-🔴 TEST-SPECIFIC REQUIREMENTS 🔴
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-1. PROPER TEST STRUCTURE:
-   - Use group() for organizing related tests
-   - Include setUp() and tearDown() for test lifecycle
-   - Create meaningful test descriptions
-   - Follow Arrange-Act-Assert pattern
-   - Include both positive and negative test cases
-
-2. COMPREHENSIVE MOCK SETUP:
-   - Create mock classes for all external dependencies
-   - Set up realistic mock responses
-   - Include error condition mocks
-   - Use proper mock verification
-   - Create reusable mock factories
-
-3. WIDGET TEST REQUIREMENTS:
-   - Use WidgetTester for all widget tests
-   - Include proper widget tree setup
-   - Test user interactions (tap, scroll, input)
-   - Verify state changes and UI updates
-   - Test different screen sizes and orientations
-
-4. PERFORMANCE AND ACCESSIBILITY:
-   - Include performance benchmarks
-   - Test memory usage patterns
-   - Verify accessibility semantics
-   - Test keyboard navigation
-   - Include golden tests for UI consistency
-
-5. TEST DATA MANAGEMENT:
-   - Create test data factories
-   - Use realistic test data
-   - Include edge case data
-   - Set up test database fixtures
-   - Create reusable test utilities
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-🔴 COMPLETE TEST IMPLEMENTATION CHECKLIST 🔴
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-Before considering a test implementation complete, verify:
-
-✅ DIRECTORY STRUCTURE:
-- test/unit/ for unit tests
-- test/widget/ for widget tests
-- test/integration/ for integration tests
-- test/mocks/ for mock implementations
-- test/fixtures/ for test data
-- test/helpers/ for test utilities
-
-✅ TEST FILES CREATED:
-- Complete unit tests for all business logic
-- Widget tests for all UI components
-- Integration tests for user flows
-- Performance tests for critical paths
-- Mock implementations for dependencies
-- Test data factories and fixtures
-
-✅ TEST INFRASTRUCTURE:
-- pubspec.yaml updated with test dependencies
-- Test helper classes created
-- Mock generation setup (if using mockito)
-- Golden test configuration
-- Test runner configuration
-
-✅ EXECUTION VERIFICATION:
-- All tests can be run with `flutter test`
-- No compilation errors
-- All imports resolve correctly
-- Mock dependencies work properly
-- Tests pass successfully
-
-✅ COVERAGE AND QUALITY:
-- High test coverage achieved
-- Edge cases covered
-- Error conditions tested
-- Performance benchmarks included
-- Accessibility compliance verified
-
-═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-MANDATORY ACTIONS FOR EVERY TEST TASK:
-
-1. Create complete test directory structure using file_system tool
-2. Write all test files with complete, executable content
-3. Create mock implementations and test utilities
-4. Set up test data factories and fixtures
-5. Update pubspec.yaml with necessary test dependencies
-6. Verify tests can be executed successfully
-7. List all created files in your response
-8. Confirm actual file creation through tool results
-
-CRITICAL: You must wrap ALL file_system calls in Python code blocks and provide COMPLETE file content, not snippets or examples.
-
-REMEMBER: You are creating a comprehensive test suite that developers can immediately run and rely on. Every test file must be production-ready and executable.
-"""
+- Test organization and structure
+- Performance and accessibility testing
+
+EXAMPLE COMPLETE TEST FILE:
+{
+  "name": "file_system",
+  "arguments": {
+    "operation": "write",
+    "path": "test/widget/home_screen_test.dart",
+    "content": "import 'package:flutter/material.dart';\\nimport 'package:flutter_test/flutter_test.dart';\\nimport 'package:myapp/screens/home_screen.dart';\\n\\nvoid main() {\\n  group('HomeScreen Tests', () {\\n    testWidgets('should display app title', (WidgetTester tester) async {\\n      await tester.pumpWidget(\\n        MaterialApp(\\n          home: HomeScreen(),\\n        ),\\n      );\\n\\n      expect(find.text('Home'), findsOneWidget);\\n      expect(find.byType(AppBar), findsOneWidget);\\n    });\\n\\n    testWidgets('should navigate when button pressed', (WidgetTester tester) async {\\n      await tester.pumpWidget(\\n        MaterialApp(\\n          home: HomeScreen(),\\n        ),\\n      );\\n\\n      await tester.tap(find.byType(ElevatedButton));\\n      await tester.pumpAndSettle();\\n\\n      expect(find.text('Hello World'), findsOneWidget);\\n    });\\n  });\\n}"
+  }
+}
+
+MANDATORY: Every response must include tool_calls array with file_system operations to create actual test files."""
 
     def _get_tools(self) -> List[Dict[str, Any]]:
         """Get tools for this agent - properly formatted for function calling"""
@@ -737,21 +357,37 @@ REMEMBER: You are creating a comprehensive test suite that developers can immedi
         self.logger.info("Creating integration tests...")
         try:
             # LLM decides test strategy
-            test_strategy = await self.llm_provider.generate_response(
+            test_strategy_response = await self.llm_provider.generate_response(
                 f"Design a comprehensive test strategy for Flutter app: {context.project_path}"
             )
+            test_strategy = (
+                test_strategy_response.structured_content
+                if hasattr(test_strategy_response, "structured_content")
+                else self._safe_json_parse(test_strategy_response.content)
+            )
+
             results = []
             for test_type in test_strategy.get("test_types", []):
-                test_code = await self.llm_provider.generate_response(
+                test_code_response = await self.llm_provider.generate_response(
                     f"Generate {test_type} test code for Flutter app at {context.project_path}"
+                )
+                test_code = (
+                    test_code_response.structured_content
+                    if hasattr(test_code_response, "structured_content")
+                    else self._safe_json_parse(test_code_response.content)
                 )
                 file_path = f"test/{test_type}_test.dart"
                 await self.file_system.create_file(file_path, test_code)
                 results.append(file_path)
             # Run tests
             test_results = await self.flutter_cli.execute("test", ["--coverage"])
-            analysis = await self.llm_provider.generate_response(
+            analysis_response = await self.llm_provider.generate_response(
                 f"Analyze Flutter test results: {test_results.get('output')}"
+            )
+            analysis = (
+                analysis_response.structured_content
+                if hasattr(analysis_response, "structured_content")
+                else self._safe_json_parse(analysis_response.content)
             )
             return ExecutionResult(
                 success=True,
@@ -794,3 +430,14 @@ REMEMBER: You are creating a comprehensive test suite that developers can immedi
             files.append({"path": current_file, "content": "\n".join(current_content)})
 
         return files
+
+    def _safe_json_parse(self, content: str) -> dict:
+        """Safely parse JSON content using the enhanced parser."""
+        try:
+            from ...llm.providers import parse_json_response
+
+            return parse_json_response(content)
+        except Exception as e:
+            self.logger.warning(f"Failed to parse JSON content: {e}")
+            # Return a proper error structure instead of fallback
+            raise ValueError(f"Invalid JSON response: {str(e)}")

@@ -32,7 +32,14 @@ class StructuredFormatter(logging.Formatter):
             if key.startswith("mas_"):  # MultiAgenticSwarm custom fields
                 log_entry[key] = value
 
-        return json.dumps(log_entry, default=str)
+        # Use custom JSON encoder for proper serialization
+        try:
+            from ..core.base_tool import JSONEncoder
+
+            return json.dumps(log_entry, cls=JSONEncoder)
+        except ImportError:
+            # Fallback to default string serialization
+            return json.dumps(log_entry, default=str)
 
 
 class MultiAgenticSwarmLogger:

@@ -4,6 +4,8 @@
 # PYTHON
 # ============================
 
+basic_music_player/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
