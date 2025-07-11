@@ -7,7 +7,6 @@ universal coverage across all swarms (FlutterSwarm, PythonSwarm, etc.).
 """
 
 import json
-import logging
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
@@ -36,6 +35,7 @@ class SharedProjectMemory:
         }
 
         # Create trigger for memory updates
+        # why is this needed?
         self.memory_trigger = mas.Trigger(
             name="project_memory_update",
             description="Triggered when project memory needs updating",
@@ -62,6 +62,7 @@ class SharedProjectMemory:
             }
         )
 
+    # this is needed at agent level, not here
     def get_context_for_agent(self, agent_name: str) -> dict:
         """Get comprehensive context for an agent including actual file contents"""
         import os
@@ -117,6 +118,7 @@ class SharedProjectMemory:
             "handoff_count": len(self.memory["agent_handoffs"]),
         }
 
+    # following is not needed, do basic manaual testing like checking brackets {}, we should run the file, if any errors than fix them using llm
     def _is_file_complete(self, content: str) -> bool:
         """Check if a file appears to be complete"""
         if not content or len(content.strip()) < 20:
@@ -180,6 +182,7 @@ class TaskContinuation:
             condition_string="output_limit_reached or incomplete_task_detected",
         )
 
+    # REDUNDANT. following is not needed, do basic manaual testing like checking brackets {}, we should run the file, if any errors than fix them using llm
     def detect_incomplete_work(
         self, agent_output: str, expected_deliverables: list, project_path: str = None
     ) -> dict:
@@ -341,7 +344,7 @@ class TaskContinuation:
         return prompt
 
 
-# Progressive Enhancement System
+# only last 200 chars read, which is not enough for code completion
 class ProgressiveEnhancement:
     """
     Ensures agents build upon existing work rather than recreating.
@@ -390,6 +393,7 @@ class ProgressiveEnhancement:
             ),
         }
 
+    # reapated again and again
     def _analyze_project_structure(self) -> dict:
         """Analyze the current project structure"""
         structure = {}
@@ -406,6 +410,7 @@ class ProgressiveEnhancement:
 
         return structure
 
+    # useless
     def _identify_enhancement_opportunities(self, existing_files: list) -> list:
         """Identify opportunities for progressive enhancement"""
         opportunities = []
@@ -495,6 +500,7 @@ class ValidationGates:
         deliverable_path = os.path.join(self.project_path, deliverable)
         return os.path.exists(deliverable_path)
 
+    # only checks if the file is complete
     def _check_code_quality(self) -> list:
         """Check code quality issues including compilation"""
         issues = []
@@ -663,9 +669,12 @@ from .agents import (
     FlutterTesterAgent,
     FlutterUIDesignerAgent,
 )
+
+# THESE ARE NOT USED
 from .tools import DartCLITool, FileSystemTool, FlutterCLITool
 
 
+# Agents should be added through configuration, not hardcoded
 class FlutterSwarm(BaseSwarm):
     """
     Flutter development swarm powered by MultiAgenticSwarm.
@@ -692,12 +701,20 @@ class FlutterSwarm(BaseSwarm):
         **kwargs,
     ):
         # Initialize coordination systems to fix isolation issues
-        self.shared_memory = SharedProjectMemory(project_path)
-        self.task_continuation = TaskContinuation(project_path)
-        self.progressive_enhancement = ProgressiveEnhancement(project_path)
-        self.validation_gates = ValidationGates(project_path)
+        # shared m
+        self.shared_memory = SharedProjectMemory(project_path)  # only updates handoffs
+        self.task_continuation = TaskContinuation(
+            project_path
+        )  # manually checks if files are complete
+        self.progressive_enhancement = ProgressiveEnhancement(
+            project_path
+        )  # manually checks if files are complete
+        self.validation_gates = ValidationGates(
+            project_path
+        )  # manually checks if files are complete
 
         # Auto-initialize comprehensive logging for universal coverage
+        # should logging be here?
         if enable_comprehensive_logging:
             from multiagenticswarm.logging import setup_logging
 
@@ -712,7 +729,7 @@ class FlutterSwarm(BaseSwarm):
                 enable_json_logs=True,
             )
 
-            # Import MAS logging module
+            # Import MAS logging module. Not being used
             import multiagenticswarm.logging as mas_logging
 
             print(f"🔍 FlutterSwarm: Comprehensive logging initialized")
