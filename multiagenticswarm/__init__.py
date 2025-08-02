@@ -84,6 +84,18 @@ except ImportError as e:
     MCPCapability = None
     MCPToolDescriptor = None
 
+# Collaboration tools and systems (new)
+try:
+    from .tools.collaboration_tools import ProgressBoard
+    from .core.delegation import SimpleDelegator
+    from .core.collaborative_system import UniversalAgent, CollaborativeSystem
+except ImportError as e:
+    # Collaboration components are optional
+    ProgressBoard = None
+    SimpleDelegator = None
+    UniversalAgent = None
+    CollaborativeSystem = None
+
 __version__ = "0.1.0"
 __author__ = "MultiAgenticSwarm Team"
 __email__ = "contact@multiagenticswarm.dev"
@@ -91,7 +103,7 @@ __email__ = "contact@multiagenticswarm.dev"
 __all__ = [
     # Core components (may be None if import fails)
     "Agent",
-    "Tool", 
+    "Tool",
     "Task",
     "Collaboration",
     "Trigger",
@@ -99,7 +111,7 @@ __all__ = [
     "System",
     # LLM providers (may be None if import fails)
     "LLMProvider",
-    "LLMResponse", 
+    "LLMResponse",
     "LLMProviderType",
     "get_llm_provider",
     "list_available_providers",
@@ -109,7 +121,7 @@ __all__ = [
     # Logging utilities (may be None if import fails)
     "setup_logging",
     "get_logger",
-    "get_logs", 
+    "get_logs",
     "view_logs",
     "clear_logs",
     "LogViewer",
@@ -120,7 +132,12 @@ __all__ = [
     "MCPTransportType",
     "MCPMessage",
     "MCPCapability",
-    "MCPToolDescriptor"
+    "MCPToolDescriptor",
+    # Collaboration components (may be None if import fails)
+    "ProgressBoard",
+    "SimpleDelegator",
+    "UniversalAgent",
+    "CollaborativeSystem"
 ]
 
 # Filter out None values from __all__

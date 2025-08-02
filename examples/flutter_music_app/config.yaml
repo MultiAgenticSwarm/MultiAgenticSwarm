@@ -1,0 +1,247 @@
+project:
+  name: "Flutter Music App"
+  description: "Collaborative development of a Flutter music streaming application"
+  collaboration_prompt: |
+    Agents should collaborate using a modular approach:
+    1. Flutter_UI_Agent focuses on UI/UX and app navigation
+       - Responsible for creating beautiful, responsive user interfaces
+       - Implements Material Design 3 components and theming
+       - Builds reusable widgets and screen layouts
+       - Handles navigation and routing throughout the app
+       - Ensures excellent user experience and accessibility
+
+    2. Flutter_Audio_Agent handles audio playback and music features
+       - Implements core audio playback functionality
+       - Creates music streaming and offline playback services
+       - Handles audio state management and controls
+       - Builds robust audio features with smooth performance
+       - Integrates with audio plugins and external services
+
+    3. Flutter_Data_Agent manages data models and state management
+       - Designs and implements all data models (Track, Playlist, User)
+       - Creates comprehensive state management solutions
+       - Handles data persistence, storage, and configuration
+       - Builds API integration layers and data services
+       - Manages app settings and user preferences
+
+    Collaboration rules:
+    - Share interface definitions early in development
+    - Review each other's code before major commits
+    - Coordinate on shared dependencies and integrations
+    - Help struggling agents with their specific tasks
+    - Use Material Design 3 principles consistently
+    - Follow Flutter best practices and clean architecture
+    - Communicate regularly through the progress board
+    - Provide code snippets and examples when helping others
+
+    Development phases:
+    1. Setup and interface definition (parallel work)
+    2. Core feature development (coordinated development)
+    3. Integration and testing (collaborative debugging)
+    4. Final polish and optimization (peer review)
+
+agents:
+  - name: "Flutter_UI_Agent"
+    description: "Specializes in Flutter UI development, Material Design 3, and user experience"
+    system_prompt: |
+      You are an expert Flutter UI developer. Your role in this collaborative project:
+
+      PRIMARY RESPONSIBILITIES:
+      - Create beautiful, responsive user interfaces using Flutter
+      - Implement Material Design 3 components and consistent theming
+      - Build reusable widgets and maintainable screen layouts
+      - Handle app navigation, routing, and user flow
+      - Ensure excellent user experience and accessibility
+
+      COLLABORATION GUIDELINES:
+      - Share UI component interfaces early with the team
+      - Coordinate with Audio Agent on player controls integration
+      - Work with Data Agent on state management and data binding
+      - Provide UI feedback and suggestions to other agents
+      - Request help when audio or data integration is needed
+
+      TECHNICAL FOCUS:
+      - Material Design 3 theming and components
+      - Responsive design for different screen sizes
+      - Smooth animations and transitions
+      - Clean, maintainable widget architecture
+      - Proper state management integration
+
+      Always prioritize user experience and collaborate actively with your teammates.
+    llm_provider: "openai"
+    llm_model: "gpt-4"
+    specialization: "ui_ux"
+
+  - name: "Flutter_Audio_Agent"
+    description: "Expert in audio features, music playback, and streaming services"
+    system_prompt: |
+      You are an expert in Flutter audio development. Your role in this collaborative project:
+
+      PRIMARY RESPONSIBILITIES:
+      - Implement robust audio playback and control systems
+      - Create music streaming and offline playback services
+      - Handle audio state management and player controls
+      - Build performance-optimized audio features
+      - Integrate with audio plugins and external music services
+
+      COLLABORATION GUIDELINES:
+      - Share audio service interfaces with UI and Data agents
+      - Coordinate with UI Agent on player control components
+      - Work with Data Agent on audio-related data models
+      - Provide audio expertise and troubleshooting help
+      - Request help when UI integration challenges arise
+
+      TECHNICAL FOCUS:
+      - Audio playback libraries and plugins
+      - Streaming service integration
+      - Offline music caching and playback
+      - Audio state management and notifications
+      - Performance optimization for smooth playback
+
+      Always prioritize audio quality and smooth user experience.
+    llm_provider: "openai"
+    llm_model: "gpt-4"
+    specialization: "audio_features"
+
+  - name: "Flutter_Data_Agent"
+    description: "Handles data models, state management, and app architecture"
+    system_prompt: |
+      You are an expert in Flutter data architecture. Your role in this collaborative project:
+
+      PRIMARY RESPONSIBILITIES:
+      - Design and implement comprehensive data models
+      - Create efficient state management solutions
+      - Handle data persistence, storage, and synchronization
+      - Build API integration layers and data services
+      - Manage app configuration, settings, and user preferences
+
+      COLLABORATION GUIDELINES:
+      - Share data model interfaces early with all agents
+      - Coordinate with UI Agent on state management integration
+      - Work with Audio Agent on audio-related data structures
+      - Provide data architecture guidance and best practices
+      - Request help when complex integrations are needed
+
+      TECHNICAL FOCUS:
+      - Clean data model design (Track, Playlist, User, etc.)
+      - State management (Provider, Riverpod, Bloc, etc.)
+      - Local storage and data persistence
+      - API integration and data synchronization
+      - App configuration and user settings management
+
+      Always prioritize data integrity, performance, and maintainable architecture.
+    llm_provider: "openai"
+    llm_model: "gpt-4"
+    specialization: "data_architecture"
+
+tools:
+  - name: "ProgressBoard"
+    description: "Centralized communication board for agent collaboration"
+    scope: "global"
+    functions:
+      - "post_update"
+      - "read_updates"
+      - "get_project_status"
+      - "share_interface"
+      - "request_help"
+      - "respond_to_help"
+      - "report_progress"
+      - "coordinate_with_team"
+      - "share_code_snippet"
+
+  - name: "CodeReview"
+    description: "Code review and feedback system"
+    scope: "global"
+
+  - name: "FileManager"
+    description: "File management for project structure"
+    scope: "global"
+
+tasks:
+  - name: "Flutter_Music_App_Development"
+    description: "Complete development of Flutter music streaming application"
+    strategy: "collaborative"
+    phases:
+      - name: "Setup & Interfaces"
+        duration: "2-3 hours"
+        parallel: true
+        activities:
+          - "Define project structure"
+          - "Create data model interfaces"
+          - "Design UI component architecture"
+          - "Plan audio service interfaces"
+
+      - name: "Core Development"
+        duration: "4-6 hours"
+        coordinated: true
+        activities:
+          - "Implement UI screens and widgets"
+          - "Build audio playback services"
+          - "Create data models and providers"
+          - "Integration between components"
+
+      - name: "Integration & Testing"
+        duration: "2-3 hours"
+        collaborative: true
+        activities:
+          - "Connect all components"
+          - "Test complete workflows"
+          - "Debug integration issues"
+          - "Performance optimization"
+
+      - name: "Final Polish"
+        duration: "1-2 hours"
+        peer_review: true
+        activities:
+          - "UI/UX final touches"
+          - "Code review and cleanup"
+          - "Documentation completion"
+          - "Final testing and validation"
+
+features:
+  core_features:
+    - "Modern UI with playlist management"
+    - "Audio playback with full controls (play, pause, skip, seek)"
+    - "User favorites and recently played tracking"
+    - "Search functionality for tracks and artists"
+    - "Offline mode support for downloaded music"
+
+  technical_requirements:
+    - "Material Design 3 theming and components"
+    - "Proper state management implementation"
+    - "Clean, maintainable code architecture"
+    - "Smooth audio playback performance"
+    - "Support for both online and offline modes"
+    - "Responsive design for different screen sizes"
+
+  deliverables:
+    - "Complete Flutter project structure"
+    - "All UI screens and reusable widgets"
+    - "Audio service implementation with streaming"
+    - "Data models and state management"
+    - "Integration tests and documentation"
+    - "Deployment-ready application"
+
+delegation_strategies:
+  - name: "hierarchical"
+    description: "Top-down task breakdown with designated lead"
+    suitable_for: "Complex projects with clear hierarchy"
+
+  - name: "autonomous"
+    description: "Bottom-up self-organization based on capabilities"
+    suitable_for: "Independent modules with clear interfaces"
+
+  - name: "collaborative"
+    description: "Peer-to-peer negotiation and consensus building"
+    suitable_for: "Integrated development requiring close coordination"
+    recommended: true
+
+success_criteria:
+  - "All agents actively participate and collaborate"
+  - "Interface definitions shared early and used effectively"
+  - "Code snippets and help provided between agents"
+  - "Progress tracked and reported regularly"
+  - "Final app structure includes all required components"
+  - "Collaboration follows the defined guidelines"
+  - "High-quality, maintainable code produced"
+  - "Team coordination visible in progress board"
