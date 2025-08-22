@@ -1423,6 +1423,32 @@ flutter:
         project_dir = self.workspace_dir / "flutter_music_app"
         processed_files = set()
 
+        def _validate_and_resolve_file_path(raw_path):
+            """Validate and normalise file paths, enforce extensions, and prevent unsafe writes."""
+            from pathlib import Path
+            valid_exts = {".dart", ".yaml", ".json", ".md"}
+            path = Path(raw_path)
+
+            # Prevent absolute or traversal
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(f"Unsafe path: {raw_path}")
+
+            # Ensure path is inside project_dir
+            full_path = (project_dir / path).resolve()
+            if project_dir not in full_path.parents and project_dir != full_path.parent:
+                raise ValueError(f"Path outside project: {raw_path}")
+
+            # Add/adjust extension
+            if full_path.suffix.lower() not in valid_exts:
+                if "pubspec" in full_path.name.lower():
+                    full_path = full_path.with_suffix(".yaml")
+                elif "lib" in full_path.parts:
+                    full_path = full_path.with_suffix(".dart")
+                else:
+                    full_path = full_path.with_suffix(".dart")
+
+            return full_path
+
         for update in code_updates:
             message = update.get('message', '')
             code_snippet = update.get('code_snippet', '')
@@ -1434,13 +1460,21 @@ flutter:
             file_path = None
             for key, path in file_mappings.items():
                 if key.lower() in message.lower():
-                    file_path = project_dir / path
+                    try:
+                        file_path = _validate_and_resolve_file_path(path)
+                    except ValueError as e:
+                        logger.error(str(e))
+                        continue
                     break
 
             if not file_path:
                 # Try to extract from file_path field if available
                 if update.get('file_path'):
-                    file_path = project_dir / update['file_path'].replace('lib/', '')
+                    try:
+                        file_path = _validate_and_resolve_file_path(update['file_path'].replace('lib/', ''))
+                    except ValueError as e:
+                        logger.error(str(e))
+                        continue
                 else:
                     logger.warning(f"Could not map message to file: {message}")
                     continue
@@ -1453,9 +1487,11 @@ flutter:
                 # Create directory if needed
                 file_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Write code to file
-                with open(file_path, 'w', encoding='utf-8') as f:
+                # Atomic write
+                tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
+                with open(tmp_path, 'w', encoding='utf-8') as f:
                     f.write(code_snippet)
+                tmp_path.replace(file_path)
 
                 created_files.append(str(file_path))
                 processed_files.add(str(file_path))
@@ -1465,6 +1501,7 @@ flutter:
                 logger.error(f"Error writing to {file_path}: {e}")
 
         return created_files
+
 
     async def execute_flutter_development(
         self,
