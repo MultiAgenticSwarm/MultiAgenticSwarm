@@ -1,10 +1,11 @@
 """
-Core agent implementation with LLM provider abstraction.
+Core agent implementation with LLM provider abstraction and LangGraph node support.
 """
 
 import uuid
 import time
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+import asyncio
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, TypedDict, Annotated
 import json
 from datetime import datetime
 
@@ -22,16 +23,56 @@ except ImportError:
         def __init__(self, **kwargs):
             for key, value in kwargs.items():
                 setattr(self, key, value)
-        
+
         def model_dump(self):
             return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-    
+
     def Field(**kwargs):
         return kwargs.get('default', None)
+
+# LangGraph imports for node functionality
+try:
+    from langgraph.prebuilt import create_react_agent
+    from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+    from langchain_core.tools import BaseTool
+    LANGGRAPH_AVAILABLE = True
+except ImportError:
+    LANGGRAPH_AVAILABLE = False
+    # Fallback types
+    BaseMessage = Any
+    HumanMessage = Any
+    AIMessage = Any
+    BaseTool = Any
+    def create_react_agent(*args, **kwargs):
+        raise ImportError("LangGraph is required for node functionality")
 
 from ..llm.providers import LLMProvider, get_llm_provider
 from ..utils.logger import get_logger
 from .tool_parser import ToolCallParser
+
+
+# Minimal AgentState interface - compatible with future full schema from Dev 1
+class AgentState(TypedDict, total=False):
+    """
+    Minimal state schema for LangGraph node compatibility.
+    This will be replaced by the full schema when Dev 1 completes Ticket #1.
+    """
+    # Core message flow
+    messages: List[Any]  # Will be List[BaseMessage] when LangGraph is fully integrated
+
+    # Agent execution results
+    agent_outputs: Dict[str, Any]
+
+    # Tool permissions and results
+    tool_permissions: Dict[str, List[str]]
+    tool_results: Dict[str, Any]
+
+    # Execution context
+    current_agent: Optional[str]
+    execution_context: Dict[str, Any]
+
+    # Error handling
+    errors: List[str]
 
 logger = get_logger(__name__)
 
@@ -52,11 +93,11 @@ class AgentConfig(BaseModel):
 class Agent:
     """
     A multi-agent system agent with pluggable LLM backend support.
-    
+
     Each agent can be configured with different LLM providers and has
     access to a hierarchical tool system (local, shared, global).
     """
-    
+
     def __init__(
         self,
         name: str,
@@ -71,7 +112,7 @@ class Agent:
     ):
         """
         Initialize an agent.
-        
+
         Args:
             name: Unique name for the agent
             description: Description of the agent's purpose
@@ -85,7 +126,7 @@ class Agent:
         """
         if not name or not name.strip():
             raise ValueError("Agent name cannot be empty")
-            
+
         self.id = agent_id or str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -95,19 +136,19 @@ class Agent:
         self.llm_config = llm_config or {}
         self.max_iterations = max_iterations
         self.memory_enabled = memory_enabled
-        
+
         # Tool access tracking
         self.local_tools: List[str] = []
         self.shared_tools: List[str] = []
         self.global_tools: List[str] = []
-        
+
         # Runtime state
         self.memory: List[Dict[str, Any]] = []
         self.execution_context: Dict[str, Any] = {}
         self._llm_provider: Optional[LLMProvider] = None
-        
+
         logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model}")
-    
+
     @property
     def llm_provider(self) -> LLMProvider:
         """Get the LLM provider instance."""
@@ -118,304 +159,346 @@ class Agent:
                 **self.llm_config
             )
         return self._llm_provider
-    
+
+    # =====================================================================
+    # LangGraph Node Functionality (Ticket #6 Implementation)
+    # =====================================================================
+
+    def __call__(self, state: AgentState) -> AgentState:
+        """
+        Make Agent callable as a LangGraph node.
+
+        This is the main entry point when the agent is used as a node in a StateGraph.
+        Reads from state["messages"] and updates state["agent_outputs"].
+
+        Args:
+            state: The current AgentState containing messages and context
+
+        Returns:
+            Updated AgentState with agent's response and outputs
+        """
+        if not LANGGRAPH_AVAILABLE:
+            logger.warning(f"Agent {self.name}: LangGraph not available, falling back to legacy mode")
+            return self._fallback_node_execution(state)
+
+        try:
+            # Extract input from state
+            messages = state.get("messages", [])
+            execution_context = state.get("execution_context", {})
+
+            # Set current agent in state
+            state["current_agent"] = self.name
+
+            # Initialize agent outputs if not present
+            if "agent_outputs" not in state:
+                state["agent_outputs"] = {}
+
+            # Get the latest human message as input
+            input_text = ""
+            if messages:
+                # Find the last human message
+                for msg in reversed(messages):
+                    if isinstance(msg, dict) and msg.get("role") == "user":
+                        input_text = msg.get("content", "")
+                        break
+                    elif hasattr(msg, 'content'):
+                        input_text = str(msg.content)
+                        break
+
+            if not input_text:
+                input_text = "Continue the conversation"
+
+            logger.info(f"Agent {self.name}: Processing as LangGraph node with input: {input_text[:100]}...")
+
+            # Use create_react_agent if tools are available and LangGraph is ready
+            tools = self._get_langchain_tools(state)
+
+            if tools and self._can_use_react_agent():
+                result = self._execute_with_react_agent(state, tools)
+            else:
+                # Direct LLM execution without legacy dependencies
+                result = self._execute_direct_llm(state, input_text, execution_context)
+
+            # Update state with results
+            state["agent_outputs"][self.name] = {
+                "output": result.get("output", ""),
+                "execution_time": result.get("execution_time", 0.0),
+                "tool_calls_made": result.get("tool_calls_made", 0),
+                "success": result.get("success", True),
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # Add agent response to messages
+            if result.get("output"):
+                # Convert to proper message format
+                if LANGGRAPH_AVAILABLE and hasattr(AIMessage, '__call__'):
+                    try:
+                        ai_message = AIMessage(content=result["output"])
+                        if "messages" not in state:
+                            state["messages"] = []
+                        state["messages"].append(ai_message)
+                    except Exception as e:
+                        logger.warning(f"Could not create AIMessage: {e}, using dict format")
+                        state["messages"].append({
+                            "role": "assistant",
+                            "content": result["output"],
+                            "agent": self.name
+                        })
+                else:
+                    # Fallback to dict format
+                    if "messages" not in state:
+                        state["messages"] = []
+                    state["messages"].append({
+                        "role": "assistant",
+                        "content": result["output"],
+                        "agent": self.name
+                    })
+
+            # Handle any errors
+            if not result.get("success", True):
+                if "errors" not in state:
+                    state["errors"] = []
+                state["errors"].append(f"Agent {self.name}: {result.get('error', 'Unknown error')}")
+
+            logger.info(f"Agent {self.name}: Completed node execution successfully")
+            return state
+
+        except Exception as e:
+            logger.error(f"Agent {self.name}: Error in node execution: {e}")
+
+            # Ensure state is properly updated even on error
+            if "errors" not in state:
+                state["errors"] = []
+            state["errors"].append(f"Agent {self.name}: {str(e)}")
+
+            if "agent_outputs" not in state:
+                state["agent_outputs"] = {}
+            state["agent_outputs"][self.name] = {
+                "output": "",
+                "error": str(e),
+                "success": False,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return state
+
+    def _can_use_react_agent(self) -> bool:
+        """Check if we can use LangGraph's create_react_agent."""
+        if not LANGGRAPH_AVAILABLE:
+            return False
+        try:
+            return hasattr(self.llm_provider, 'get_langchain_llm')
+        except Exception:
+            # If LLM provider initialization fails, we can't use react agent
+            return False
+
+    def _get_langchain_tools(self, state: AgentState) -> List[Any]:
+        """
+        Get tools in LangChain format for use with create_react_agent.
+        This is a placeholder until Dev 3 completes tool conversion (Ticket #9).
+        """
+        # TODO: This will be properly implemented when Ticket #9 (Tool System conversion) is done
+        # For now, return empty list to avoid blocking development
+        return []
+
+    def _execute_with_react_agent(self, state: AgentState, tools: List[Any]) -> Dict[str, Any]:
+        """
+        Execute using LangGraph's create_react_agent.
+        This will be the primary execution method once tools are converted.
+        """
+        try:
+            # Get LangChain-compatible LLM
+            llm = self.llm_provider.get_langchain_llm()
+
+            # Create react agent
+            agent_executor = create_react_agent(llm, tools)
+
+            # Prepare input
+            messages = state.get("messages", [])
+
+            # Execute
+            start_time = time.time()
+            response = agent_executor.invoke({"messages": messages})
+            execution_time = time.time() - start_time
+
+            return {
+                "output": response.get("output", ""),
+                "execution_time": execution_time,
+                "tool_calls_made": 0,  # TODO: Extract from response
+                "success": True
+            }
+
+        except Exception as e:
+            logger.error(f"Agent {self.name}: React agent execution failed: {e}")
+            return {
+                "output": "",
+                "error": str(e),
+                "execution_time": 0.0,
+                "success": False
+            }
+
+    def _execute_direct_llm(
+        self,
+        state: AgentState,
+        input_text: str,
+        execution_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Execute using direct LLM call without legacy dependencies.
+        This is a simplified execution for LangGraph node usage.
+        """
+        start_time = time.time()
+
+        try:
+            # Prepare messages for LLM
+            messages = []
+
+            # Add system prompt
+            if self.system_prompt:
+                messages.append({"role": "system", "content": self.system_prompt})
+
+            # Add conversation history from state
+            state_messages = state.get("messages", [])
+            for msg in state_messages[-5:]:  # Last 5 messages for context
+                if isinstance(msg, dict):
+                    messages.append(msg)
+                else:
+                    # Handle LangChain message objects
+                    if hasattr(msg, 'content'):
+                        role = "user" if hasattr(msg, '__class__') and "Human" in msg.__class__.__name__ else "assistant"
+                        messages.append({"role": role, "content": str(msg.content)})
+
+            # Add current input if not already in messages
+            if not messages or messages[-1].get("content") != input_text:
+                messages.append({"role": "user", "content": input_text})
+
+            # Execute LLM call
+            try:
+                response = asyncio.run(self.llm_provider.execute(
+                    messages=messages,
+                    context=execution_context
+                ))
+
+                output = response.content if hasattr(response, 'content') else str(response)
+                success = True
+                error = None
+
+            except Exception as llm_error:
+                logger.warning(f"Agent {self.name}: LLM execution failed: {llm_error}")
+                output = f"LLM execution failed: {str(llm_error)}"
+                success = False
+                error = str(llm_error)
+
+            execution_time = time.time() - start_time
+
+            result = {
+                "output": output,
+                "execution_time": execution_time,
+                "tool_calls_made": 0,
+                "success": success
+            }
+
+            if error:
+                result["error"] = error
+
+            return result
+
+        except Exception as e:
+            execution_time = time.time() - start_time
+            logger.error(f"Agent {self.name}: Direct LLM execution failed: {e}")
+            return {
+                "output": f"Agent execution failed: {str(e)}",
+                "error": str(e),
+                "execution_time": execution_time,
+                "tool_calls_made": 0,
+                "success": False
+            }
+
+    def _fallback_node_execution(self, state: AgentState) -> AgentState:
+        """
+        Fallback execution when LangGraph is not available.
+        Ensures the agent can still work as a node.
+        """
+        logger.warning(f"Agent {self.name}: Using fallback node execution")
+
+        try:
+            # Extract input
+            messages = state.get("messages", [])
+            input_text = "Continue the conversation"
+
+            if messages:
+                last_msg = messages[-1]
+                if isinstance(last_msg, dict):
+                    input_text = last_msg.get("content", input_text)
+                else:
+                    input_text = str(last_msg)
+
+            # Execute with direct LLM call
+            result = self._execute_direct_llm(
+                state, input_text, state.get("execution_context", {})
+            )
+
+            # Update state
+            if "agent_outputs" not in state:
+                state["agent_outputs"] = {}
+
+            state["agent_outputs"][self.name] = result
+
+            # Add to messages
+            if result.get("output"):
+                if "messages" not in state:
+                    state["messages"] = []
+                state["messages"].append({
+                    "role": "assistant",
+                    "content": result["output"],
+                    "agent": self.name
+                })
+
+            return state
+
+        except Exception as e:
+            logger.error(f"Agent {self.name}: Fallback execution failed: {e}")
+            if "errors" not in state:
+                state["errors"] = []
+            state["errors"].append(f"Agent {self.name}: {str(e)}")
+            return state
+
     def add_to_memory(self, role: str, content: str, metadata: Optional[Dict] = None) -> None:
         """Add a message to the agent's memory."""
         if not self.memory_enabled:
             return
-            
+
         self.memory.append({
             "role": role,
             "content": content,
             "metadata": metadata or {},
             "timestamp": datetime.now().isoformat()
         })
-    
+
     def clear_memory(self) -> None:
         """Clear the agent's memory."""
         self.memory.clear()
         logger.debug(f"Cleared memory for agent '{self.name}'")
-    
+
     def get_available_tools(self, tool_registry: Dict[str, Any]) -> List[str]:
         """Get all tools available to this agent."""
         available = []
-        
+
         # Add local tools
         available.extend(self.local_tools)
-        
+
         # Add shared tools where this agent has access
         for tool_name in self.shared_tools:
             if tool_name in tool_registry:
                 tool = tool_registry[tool_name]
                 if hasattr(tool, 'shared_agents') and self.name in tool.shared_agents:
                     available.append(tool_name)
-        
+
         # Add global tools
         available.extend(self.global_tools)
-        
-        return list(set(available))  # Remove duplicates
-    
-    """
-    Fixed Agent execution method that handles tool calls
-    """
 
-    async def execute(
-        self, 
-        input_text: str, 
-        context: Optional[Dict[str, Any]] = None,
-        tool_executor: Optional["ToolExecutor"] = None,
-        available_tools: Optional[List[str]] = None,
-        tool_registry: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Execute a task with standardized tool support."""
-        start_time = time.time()
-        
-        # Log the agent action start
-        logger.log_agent_action(
-            agent_name=self.name,
-            action="execute",
-            input_data=input_text,
-            context=context
-        )
-        
-        try:
-            # Add input to memory
-            self.add_to_memory("user", input_text)
-            
-            # Prepare context
-            execution_context = context or {}
-            
-            # Handle tool access - support both new tool_executor and legacy available_tools
-            if tool_executor:
-                tools_schema = tool_executor.get_tools_schema_for_agent(self.name)
-                if tools_schema:
-                    execution_context["tools"] = tools_schema
-                    # Set tool choice based on provider
-                    if self.llm_provider_name == "anthropic":
-                        execution_context["tool_choice"] = {"type": "auto"}
-                    else:
-                        execution_context["tool_choice"] = "auto"
-                    logger.debug(f"Agent {self.name}: Providing {len(tools_schema)} tools to LLM")
-            elif available_tools and tool_registry:
-                # Legacy support: create tool schemas from available_tools and tool_registry
-                tools_schemas = []
-                for tool_name in available_tools:
-                    if tool_name in tool_registry:
-                        tool = tool_registry[tool_name]
-                        if tool.can_be_used_by(self):
-                            schema = tool.get_schema()
-                            tools_schemas.append(schema)
-                
-                if tools_schemas:
-                    execution_context["tools"] = tools_schemas
-                    if self.llm_provider_name == "anthropic":
-                        execution_context["tool_choice"] = {"type": "auto"}
-                    else:
-                        execution_context["tool_choice"] = "auto"
-                    logger.debug(f"Agent {self.name}: Providing {len(tools_schemas)} legacy tools to LLM")
-            
-            # Prepare messages for LLM
-            messages = []
-            
-            # Add system prompt
-            if self.system_prompt:
-                messages.append({"role": "system", "content": self.system_prompt})
-            
-            # Add conversation history
-            for msg in self.memory[-10:]:
-                messages.append({"role": msg["role"], "content": msg["content"]})
-            
-            # Add tool parser
-            parser = ToolCallParser()
-            
-            # Start tool calling loop
-            max_iterations = self.max_iterations
-            iteration = 0
-            final_response = ""
-            
-            while iteration < max_iterations:
-                iteration += 1
-                logger.debug(f"Agent {self.name}: Tool calling iteration {iteration}")
-                
-                # Execute with LLM provider
-                response = await self.llm_provider.execute(
-                    messages=messages,
-                    context=execution_context
-                )
-                
-                # First check if LLM has native tool calling
-                tool_calls = []
-                if hasattr(self.llm_provider, 'extract_tool_calls'):
-                    tool_calls = self.llm_provider.extract_tool_calls(response)
-                
-                # If no native tool calls, parse from response content
-                if not tool_calls and response.content:
-                    tool_calls = parser.extract_tool_calls(response.content)
-                    logger.debug(f"Parsed {len(tool_calls)} tool calls from response content")
-            
-                if not tool_calls:
-                    # No tool calls, we're done
-                    final_response = response.content
-                    break
-                
-                # Execute tool calls using standardized executor or legacy tools
-                if tool_executor:
-                    logger.debug(f"Agent {self.name}: Executing {len(tool_calls)} tool calls")
-                    
-                    # Execute all tool calls
-                    tool_responses = await tool_executor.execute_tool_calls(tool_calls, self.name)
-                    
-                    # Add assistant message with tool calls to conversation
-                    messages.append({
-                        "role": "assistant",
-                        "content": response.content,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments)
-                                }
-                            } for tc in tool_calls
-                        ]
-                    })
-                    
-                    # Add tool responses to conversation
-                    if hasattr(self.llm_provider, 'create_tool_response_for_llm'):
-                        tool_messages = self.llm_provider.create_tool_response_for_llm(tool_responses)
-                        if isinstance(tool_messages, list):
-                            messages.extend(tool_messages)
-                        else:
-                            messages.append(tool_messages)
-                    
-                elif tool_registry and available_tools:
-                    # Legacy tool execution support
-                    logger.debug(f"Agent {self.name}: Executing {len(tool_calls)} tool calls (legacy mode)")
-                    
-                    # Execute tool calls using legacy tools
-                    tool_results = []
-                    for tool_call in tool_calls:
-                        if tool_call.name in tool_registry and tool_call.name in available_tools:
-                            tool = tool_registry[tool_call.name]
-                            try:
-                                if tool.can_be_used_by(self):
-                                    result = await tool.execute(self, **tool_call.arguments)
-                                    tool_results.append({
-                                        "tool_call_id": tool_call.id,
-                                        "output": str(result.get('output', result))
-                                    })
-                                else:
-                                    tool_results.append({
-                                        "tool_call_id": tool_call.id, 
-                                        "output": f"Permission denied for tool {tool_call.name}"
-                                    })
-                            except Exception as e:
-                                tool_results.append({
-                                    "tool_call_id": tool_call.id,
-                                    "output": f"Tool execution error: {str(e)}"
-                                })
-                    
-                    # Add assistant message with tool calls to conversation
-                    messages.append({
-                        "role": "assistant", 
-                        "content": response.content,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function", 
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments)
-                                }
-                            } for tc in tool_calls
-                        ]
-                    })
-                    
-                    # Add tool results to conversation  
-                    for result in tool_results:
-                        # Check if provider is Anthropic and format accordingly
-                        if self.llm_provider_name == "anthropic":
-                            messages.append({
-                                "role": "user",
-                                "content": [
-                                    {
-                                        "type": "tool_result",
-                                        "tool_use_id": result["tool_call_id"],
-                                        "content": json.dumps(result["output"])
-                                    }
-                                ]
-                            })
-                        else:
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": result["tool_call_id"],
-                                "content": json.dumps(result["output"])
-                            })
-                
-                else:
-                    # No tool execution available
-                    logger.warning(f"Agent {self.name}: Tool calls requested but no tool executor or registry available")
-                    final_response = response.content
-                    break
-            
-            # If we ran out of iterations, use the last response
-            if iteration >= max_iterations and not final_response:
-                final_response = "Maximum tool calling iterations reached."
-                logger.warning(f"Agent {self.name}: Reached maximum tool calling iterations")
-            
-            # Add final response to memory
-            self.add_to_memory("assistant", final_response)
-            
-            execution_time = time.time() - start_time
-            
-            # Create result
-            result = {
-                "agent_id": self.id,
-                "agent_name": self.name,
-                "input": input_text,
-                "output": final_response,
-                "tool_calls_made": iteration - 1,
-                "execution_time": execution_time,
-                "success": True
-            }
-            
-            logger.log_agent_action(
-                agent_name=self.name,
-                action="execute_complete",
-                input_data=input_text,
-                output_data=final_response,
-                context={
-                    "execution_time": execution_time,
-                    "tool_iterations": iteration - 1
-                }
-            )
-            
-            return result
-            
-        except Exception as e:
-            execution_time = time.time() - start_time
-            
-            logger.log_agent_action(
-                agent_name=self.name,
-                action="execute_error",
-                input_data=input_text,
-                context={
-                    "error": str(e),
-                    "execution_time": execution_time
-                }
-            )
-            
-            return {
-                "agent_id": self.id,
-                "agent_name": self.name,
-                "input": input_text,
-                "output": "",
-                "error": str(e),
-                "execution_time": execution_time,
-                "success": False
-            }
-    
+        return list(set(available))  # Remove duplicates
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert agent to dictionary representation."""
         return {
@@ -432,7 +515,7 @@ class Agent:
             "shared_tools": self.shared_tools,
             "global_tools": self.global_tools
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Agent":
         """Create agent from dictionary representation."""
@@ -447,18 +530,46 @@ class Agent:
             memory_enabled=data.get("memory_enabled", True),
             agent_id=data.get("id")
         )
-        
+
         # Restore tool assignments
         agent.local_tools = data.get("local_tools", [])
         agent.shared_tools = data.get("shared_tools", [])
         agent.global_tools = data.get("global_tools", [])
-        
+
         return agent
-    
+
     @classmethod
     def from_config(cls, config: AgentConfig) -> "Agent":
         """Create agent from configuration object."""
         return cls.from_dict(config.model_dump())
-    
+
+    def get_node_info(self) -> Dict[str, Any]:
+        """
+        Get information about this agent as a graph node.
+
+        Useful for graph compilation and visualization.
+        """
+        try:
+            return {
+                "name": self.name,
+                "id": self.id,
+                "type": "agent_node",
+                "description": self.description,
+                "llm_provider": self.llm_provider_name,
+                "llm_model": self.llm_model,
+                "supports_tools": len(self.local_tools + self.shared_tools + self.global_tools) > 0,
+                "supports_react_agent": self._can_use_react_agent(),
+                "node_compatible": True
+            }
+        except Exception as e:
+            logger.error(f"Agent {self.name}: Error getting node info: {e}")
+            return {
+                "name": self.name,
+                "id": self.id,
+                "type": "agent_node",
+                "error": str(e),
+                "node_compatible": True
+            }
+
     def __repr__(self) -> str:
-        return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}')"
+        return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}', node_compatible=True)"
