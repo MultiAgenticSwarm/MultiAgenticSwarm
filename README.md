@@ -1,5 +1,10 @@
 # MultiAgenticSwarm
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-black?style=flat&logo=github)](https://github.com/multiagenticswarm/multiagenticswarm)
+[![Discord](https://img.shields.io/badge/Discord-Community-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/MultiAgenticSwarm)
+[![Discord Dev](https://img.shields.io/badge/Discord-Development-7289DA?style=flat&logo=discord&logoColor=white)](https://discord.gg/zMcfQDCY)
+[![ClickUp](https://img.shields.io/badge/ClickUp-Project_Board-7B68EE?style=flat&logo=clickup&logoColor=white)](https://sharing.clickup.com/9003301014/b/h/4-90186234767-2/f5bfa51937e0ee8)
+
 > **⚠️ DEVELOPMENT STATUS**: This library is currently in active development and not yet functional. The API and examples shown are proposed designs. For detailed technical specifications, see the [Architecture Documentation](docs/) and [Q&A](docs/question_and_answer.md).
 
 An intelligent multi-agent orchestration system that builds and executes workflows from natural language collaboration prompts. Built on LangGraph, it dynamically creates agent teams that can adapt, collaborate, and evolve at runtime.
@@ -885,6 +890,8 @@ Release team handles app store deployment.
 
 - **GitHub**: [MultiAgenticSwarm Repository](https://github.com/multiagenticswarm/multiagenticswarm)
 - **Discord**: [Join our community](https://discord.gg/MultiAgenticSwarm)
+- **Discord Development**: [Active development discussions](https://discord.gg/zMcfQDCY)
+- **Project Management**: [ClickUp Development Board](https://sharing.clickup.com/9003301014/b/h/4-90186234767-2/f5bfa51937e0ee8)
 - **Documentation**: [Full docs site](https://multiagenticswarm.readthedocs.io)
 - **Examples**: [Example gallery](https://github.com/multiagenticswarm/examples)
 - **Blog**: [Technical blog](https://blog.multiagenticswarm.com)
