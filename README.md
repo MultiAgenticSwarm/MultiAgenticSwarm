@@ -190,7 +190,9 @@ system = System()
 frontend_dev = Agent(
     name="Frontend_Developer", 
     prompt="You create user interfaces using React and modern CSS frameworks",
-    llm_provider="openai", 
+    llm_provider="openai",
+    # Define internal workflow nodes
+    internal_pattern="planner_executor_validator",
     tools=["react_generator", "css_processor", "component_tester"]
 )
 
@@ -198,6 +200,8 @@ backend_dev = Agent(
     name="Backend_Developer",
     prompt="You build REST APIs, manage databases, and handle server logic", 
     llm_provider="anthropic",
+    # Simpler internal structure for focused tasks
+    internal_pattern="executor_validator", 
     tools=["api_builder", "database_manager", "server_deployer"]
 )
 
@@ -205,6 +209,14 @@ qa_engineer = Agent(
     name="QA_Engineer",
     prompt="You write tests, find bugs, and ensure code quality standards",
     llm_provider="azure",
+    # Complex QA workflow with multiple validation steps
+    internal_nodes={
+        "test_planner": {"prompt": "Plan comprehensive test strategy"},
+        "test_executor": {"prompt": "Execute automated and manual tests"},
+        "bug_analyzer": {"prompt": "Analyze failures and categorize bugs"},
+        "report_generator": {"prompt": "Generate detailed QA reports"}
+    },
+    internal_flow="test_planner -> test_executor -> bug_analyzer -> report_generator",
     tools=["test_generator", "bug_detector", "performance_analyzer"]
 )
 
@@ -510,26 +522,86 @@ system.add_tool("production_deployer",
 Each agent is internally composed of multiple LangGraph nodes for complex reasoning:
 
 ```python
-# Each agent automatically contains multiple internal nodes:
-Frontend_Developer = {
-    "planner_node": "Analyzes requirements and plans implementation",
-    "executor_node": "Writes actual code and creates components", 
-    "validator_node": "Reviews code quality and tests functionality",
-    "router_node": "Decides next action based on current state"
-}
-
-# Agents can be configured with different internal patterns:
-complex_agent = Agent(
-    name="Senior_Developer",
-    internal_pattern="planner_executor_reviewer",  # Multi-step reasoning
-    tools=["code_writer", "test_runner", "code_reviewer"]
+# Agents are created with internal subgraph patterns
+frontend_agent = Agent(
+    name="Frontend_Developer",
+    system_prompt="You are a frontend developer",
+    llm_provider="openai",
+    # Define internal node structure
+    internal_nodes={
+        "planner": {
+            "type": "planning",
+            "prompt": "Analyze requirements and plan implementation approach",
+            "enabled": True
+        },
+        "executor": {
+            "type": "execution", 
+            "prompt": "Write actual code and create components",
+            "enabled": True
+        },
+        "validator": {
+            "type": "validation",
+            "prompt": "Review code quality and test functionality", 
+            "enabled": True
+        }
+    },
+    # Define flow between internal nodes
+    internal_flow="planner -> executor -> validator",
+    tools=["code_writer", "component_tester"]
 )
 
+# Or use predefined patterns for simpler setup
 simple_agent = Agent(
-    name="Junior_Developer", 
-    internal_pattern="single_node",  # Direct execution
+    name="Junior_Developer",
+    internal_pattern="single_node",  # Just one execution node
     tools=["code_writer"]
 )
+
+complex_agent = Agent(
+    name="Senior_Developer", 
+    internal_pattern="planner_executor_reviewer",  # Three-step process
+    tools=["code_writer", "code_reviewer", "test_runner"]
+)
+
+# Enable/disable internal nodes at runtime
+frontend_agent.enable_node("validator")   # Turn on validation step
+frontend_agent.disable_node("planner")    # Skip planning for simple tasks
+
+# Check which nodes are active
+active_nodes = frontend_agent.get_active_nodes()
+# Returns: ["executor", "validator"]
+
+# Modify node behavior dynamically
+frontend_agent.update_node_prompt(
+    "validator", 
+    "Focus on security and performance in code review"
+)
+```
+
+### 🔧 Agent Node Management
+
+```python
+# Add new internal nodes to existing agents
+frontend_agent.add_internal_node(
+    name="security_checker",
+    node_type="validation",
+    prompt="Check for security vulnerabilities",
+    position="after:executor"  # Insert after executor node
+)
+
+# Remove nodes that aren't needed
+frontend_agent.remove_internal_node("planner")
+
+# Conditional node activation based on task complexity
+frontend_agent.set_conditional_nodes({
+    "planner": "task.complexity > 0.7",  # Only plan for complex tasks
+    "validator": "task.requires_review == True"
+})
+
+# View the current internal graph structure
+print(frontend_agent.internal_graph_structure())
+# Output:
+# executor -> security_checker -> validator (if conditions met)
 ```
 
 ### 📊 Tool Permission Matrix
