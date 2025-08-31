@@ -346,8 +346,8 @@ class TestLangGraphStateFlow:
         state = merge_states(state, approval_updates)
         state = merge_states(state, agent_update)
         
-        # For pending_responses, manually clear since the reducer merges rather than replaces
-        state["pending_responses"] = []
+        # For pending_responses, clear using the reducer system by passing an empty list update
+        state = merge_states(state, {"pending_responses": []})
         
         # Validate approval processed
         assert state["requires_human_approval"] is False
