@@ -6,11 +6,11 @@ with dynamic configuration and hierarchical tool sharing.
 # Core imports
 try:
     from .core.agent import Agent
-    from .core.tool import Tool
-    from .core.task import Task, Collaboration
-    from .core.trigger import Trigger
     from .core.automation import Automation
     from .core.system import System
+    from .core.task import Collaboration, Task
+    from .core.tool import Tool
+    from .core.trigger import Trigger
 except ImportError as e:
     # Handle potential circular import issues
     Agent = None
@@ -25,13 +25,13 @@ except ImportError as e:
 try:
     from .llm.providers import (
         LLMProvider,
-        LLMResponse,
         LLMProviderType,
+        LLMResponse,
+        create_provider_from_config,
         get_llm_provider,
-        list_available_providers,
         get_provider_info,
         health_check_provider,
-        create_provider_from_config
+        list_available_providers,
     )
 except ImportError as e:
     # LLM providers are optional
@@ -46,14 +46,8 @@ except ImportError as e:
 
 # Logging utilities
 try:
-    from .utils.logger import (
-        setup_logging,
-        get_logger,
-        get_logs,
-        view_logs,
-        clear_logs
-    )
     from .utils.log_viewer import LogViewer
+    from .utils.logger import clear_logs, get_logger, get_logs, setup_logging, view_logs
 except ImportError as e:
     # Logging utilities are optional but recommended
     setup_logging = None
@@ -66,13 +60,13 @@ except ImportError as e:
 # MCP integration components (optional)
 try:
     from .core.mcp_integration import (
-        MCPServer,
-        MCPClient,
-        MCPTool,
-        MCPTransportType,
-        MCPMessage,
         MCPCapability,
-        MCPToolDescriptor
+        MCPClient,
+        MCPMessage,
+        MCPServer,
+        MCPTool,
+        MCPToolDescriptor,
+        MCPTransportType,
     )
 except ImportError as e:
     # MCP integration is optional
@@ -86,9 +80,9 @@ except ImportError as e:
 
 # Collaboration tools and systems (new)
 try:
-    from .tools.collaboration_tools import ProgressBoard
+    from .core.collaborative_system import CollaborativeSystem, UniversalAgent
     from .core.delegation import SimpleDelegator
-    from .core.collaborative_system import UniversalAgent, CollaborativeSystem
+    from .tools.collaboration_tools import ProgressBoard
 except ImportError as e:
     # Collaboration components are optional
     ProgressBoard = None
@@ -137,7 +131,7 @@ __all__ = [
     "ProgressBoard",
     "SimpleDelegator",
     "UniversalAgent",
-    "CollaborativeSystem"
+    "CollaborativeSystem",
 ]
 
 # Filter out None values from __all__

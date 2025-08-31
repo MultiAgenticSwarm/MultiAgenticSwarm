@@ -2,8 +2,8 @@
 Simple delegation strategies for multi-agent collaboration.
 """
 
-from typing import Any, Dict, List, Optional, Union
 from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
 from ..utils.logger import get_logger
 
@@ -12,9 +12,10 @@ logger = get_logger(__name__)
 
 class DelegationStrategy(str, Enum):
     """Delegation strategy types."""
-    HIERARCHICAL = "hierarchical"     # Top-down task breakdown
-    AUTONOMOUS = "autonomous"         # Bottom-up self-organization
-    COLLABORATIVE = "collaborative"   # Peer-to-peer negotiation
+
+    HIERARCHICAL = "hierarchical"  # Top-down task breakdown
+    AUTONOMOUS = "autonomous"  # Bottom-up self-organization
+    COLLABORATIVE = "collaborative"  # Peer-to-peer negotiation
 
 
 class SimpleDelegator:
@@ -46,7 +47,7 @@ class SimpleDelegator:
         main_task: str,
         agents: List[str],
         strategy: Optional[DelegationStrategy] = None,
-        lead_agent: Optional[str] = None
+        lead_agent: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Delegate a main task to agents using specified strategy.
@@ -62,15 +63,23 @@ class SimpleDelegator:
         """
         used_strategy = strategy or self.strategy
 
-        self.logger.info(f"Delegating task using {used_strategy} strategy to {len(agents)} agents")
+        self.logger.info(
+            f"Delegating task using {used_strategy} strategy to {len(agents)} agents"
+        )
 
         # Delegate based on strategy
         if used_strategy == DelegationStrategy.HIERARCHICAL:
-            return await self._hierarchical_delegation(main_task, agents, lead_agent, self.collaboration_prompt)
+            return await self._hierarchical_delegation(
+                main_task, agents, lead_agent, self.collaboration_prompt
+            )
         elif used_strategy == DelegationStrategy.AUTONOMOUS:
-            return await self._autonomous_delegation(main_task, agents, self.collaboration_prompt)
+            return await self._autonomous_delegation(
+                main_task, agents, self.collaboration_prompt
+            )
         elif used_strategy == DelegationStrategy.COLLABORATIVE:
-            return await self._collaborative_delegation(main_task, agents, self.collaboration_prompt)
+            return await self._collaborative_delegation(
+                main_task, agents, self.collaboration_prompt
+            )
         else:
             raise ValueError(f"Unknown delegation strategy: {used_strategy}")
 
@@ -79,7 +88,7 @@ class SimpleDelegator:
         main_task: str,
         agents: List[str],
         lead_agent: Optional[str],
-        collaboration_prompt: Optional[str]
+        collaboration_prompt: Optional[str],
     ) -> Dict[str, Any]:
         """
         Hierarchical delegation: Lead agent breaks down tasks.
@@ -102,7 +111,7 @@ class SimpleDelegator:
             agent_name="SimpleDelegator",
             message=f"Starting hierarchical delegation with lead: {lead}",
             update_type="delegation_start",
-            tags=["delegation", "hierarchical"]
+            tags=["delegation", "hierarchical"],
         )
 
         # Lead agent analyzes task and collaboration prompt
@@ -113,7 +122,7 @@ class SimpleDelegator:
             "main_task": main_task,
             "collaboration_prompt": collaboration_prompt,
             "task_breakdown": [],
-            "coordination_method": "lead_directed"
+            "coordination_method": "lead_directed",
         }
 
         # Post delegation plan
@@ -121,28 +130,31 @@ class SimpleDelegator:
             agent_name=lead,
             message=f"Lead agent analyzing task: {main_task[:100]}...",
             update_type="task_analysis",
-            tags=["analysis", "lead"]
+            tags=["analysis", "lead"],
         )
 
         # In a real implementation, the lead agent would use LLM to break down tasks
         # For now, we create a basic structure
-        basic_breakdown = self._create_basic_flutter_breakdown(main_task, agents, collaboration_prompt)
+        basic_breakdown = self._create_basic_flutter_breakdown(
+            main_task, agents, collaboration_prompt
+        )
         delegation_plan["task_breakdown"] = basic_breakdown
 
         # Assign tasks based on collaboration prompt roles
         if collaboration_prompt and "Agent1" in collaboration_prompt:
             # Parse roles from collaboration prompt
-            role_assignments = self._parse_collaboration_roles(collaboration_prompt, agents)
+            role_assignments = self._parse_collaboration_roles(
+                collaboration_prompt, agents
+            )
             delegation_plan["role_assignments"] = role_assignments
 
-        self.logger.info(f"Hierarchical delegation completed with {len(basic_breakdown)} subtasks")
+        self.logger.info(
+            f"Hierarchical delegation completed with {len(basic_breakdown)} subtasks"
+        )
         return delegation_plan
 
     async def _autonomous_delegation(
-        self,
-        main_task: str,
-        agents: List[str],
-        collaboration_prompt: Optional[str]
+        self, main_task: str, agents: List[str], collaboration_prompt: Optional[str]
     ) -> Dict[str, Any]:
         """
         Autonomous delegation: Agents self-organize based on capabilities.
@@ -160,7 +172,7 @@ class SimpleDelegator:
             agent_name="SimpleDelegator",
             message=f"Starting autonomous delegation with {len(agents)} agents",
             update_type="delegation_start",
-            tags=["delegation", "autonomous"]
+            tags=["delegation", "autonomous"],
         )
 
         delegation_plan = {
@@ -169,7 +181,7 @@ class SimpleDelegator:
             "main_task": main_task,
             "collaboration_prompt": collaboration_prompt,
             "agent_proposals": [],
-            "coordination_method": "self_organization"
+            "coordination_method": "self_organization",
         }
 
         # Each agent analyzes task and proposes contribution
@@ -178,11 +190,13 @@ class SimpleDelegator:
                 agent_name=agent,
                 message=f"Analyzing task for autonomous contribution: {main_task[:50]}...",
                 update_type="task_analysis",
-                tags=["analysis", "autonomous"]
+                tags=["analysis", "autonomous"],
             )
 
             # Create proposal based on agent name/role hints
-            proposal = self._create_agent_proposal(agent, main_task, collaboration_prompt)
+            proposal = self._create_agent_proposal(
+                agent, main_task, collaboration_prompt
+            )
             delegation_plan["agent_proposals"].append(proposal)
 
             # Post proposal
@@ -190,17 +204,16 @@ class SimpleDelegator:
                 agent_name=agent,
                 message=f"Proposed contribution: {proposal['contribution'][:50]}...",
                 update_type="proposal",
-                tags=["proposal", "autonomous"]
+                tags=["proposal", "autonomous"],
             )
 
-        self.logger.info(f"Autonomous delegation completed with {len(agents)} proposals")
+        self.logger.info(
+            f"Autonomous delegation completed with {len(agents)} proposals"
+        )
         return delegation_plan
 
     async def _collaborative_delegation(
-        self,
-        main_task: str,
-        agents: List[str],
-        collaboration_prompt: Optional[str]
+        self, main_task: str, agents: List[str], collaboration_prompt: Optional[str]
     ) -> Dict[str, Any]:
         """
         Collaborative delegation: Agents negotiate through progress board.
@@ -218,7 +231,7 @@ class SimpleDelegator:
             agent_name="SimpleDelegator",
             message=f"Starting collaborative delegation with {len(agents)} agents",
             update_type="delegation_start",
-            tags=["delegation", "collaborative"]
+            tags=["delegation", "collaborative"],
         )
 
         delegation_plan = {
@@ -227,7 +240,7 @@ class SimpleDelegator:
             "main_task": main_task,
             "collaboration_prompt": collaboration_prompt,
             "negotiation_rounds": [],
-            "coordination_method": "peer_negotiation"
+            "coordination_method": "peer_negotiation",
         }
 
         # Conduct multiple rounds of negotiation
@@ -238,36 +251,43 @@ class SimpleDelegator:
                 agent_name="SimpleDelegator",
                 message=f"Starting negotiation round {round_num}",
                 update_type="negotiation_round",
-                tags=["negotiation", f"round_{round_num}"]
+                tags=["negotiation", f"round_{round_num}"],
             )
 
             # Each agent proposes or adjusts based on previous rounds
             for agent in agents:
                 # In round 1, initial proposals
                 if round_num == 1:
-                    proposal = self._create_agent_proposal(agent, main_task, collaboration_prompt)
+                    proposal = self._create_agent_proposal(
+                        agent, main_task, collaboration_prompt
+                    )
                     message = f"Initial proposal: {proposal['contribution']}"
                 else:
                     # Later rounds: adjustments based on coordination
-                    proposal = self._create_adjustment_proposal(agent, delegation_plan, round_num)
-                    message = f"Round {round_num} adjustment: {proposal['contribution']}"
+                    proposal = self._create_adjustment_proposal(
+                        agent, delegation_plan, round_num
+                    )
+                    message = (
+                        f"Round {round_num} adjustment: {proposal['contribution']}"
+                    )
 
-                round_negotiations.append({
-                    "agent": agent,
-                    "round": round_num,
-                    "proposal": proposal,
-                    "timestamp": self.progress_board.post_update(
-                        agent_name=agent,
-                        message=message,
-                        update_type="negotiation_proposal",
-                        tags=["negotiation", f"round_{round_num}"]
-                    )["timestamp"]
-                })
+                round_negotiations.append(
+                    {
+                        "agent": agent,
+                        "round": round_num,
+                        "proposal": proposal,
+                        "timestamp": self.progress_board.post_update(
+                            agent_name=agent,
+                            message=message,
+                            update_type="negotiation_proposal",
+                            tags=["negotiation", f"round_{round_num}"],
+                        )["timestamp"],
+                    }
+                )
 
-            delegation_plan["negotiation_rounds"].append({
-                "round": round_num,
-                "negotiations": round_negotiations
-            })
+            delegation_plan["negotiation_rounds"].append(
+                {"round": round_num, "negotiations": round_negotiations}
+            )
 
             # Check for consensus (simplified - agents agree on non-overlapping tasks)
             if self._check_consensus(round_negotiations):
@@ -275,7 +295,7 @@ class SimpleDelegator:
                     agent_name="SimpleDelegator",
                     message=f"Consensus reached in round {round_num}",
                     update_type="consensus",
-                    tags=["negotiation", "consensus"]
+                    tags=["negotiation", "consensus"],
                 )
                 break
 
@@ -283,17 +303,16 @@ class SimpleDelegator:
         self.progress_board.coordinate_with_team(
             agent_name="SimpleDelegator",
             message="Collaborative delegation completed. Beginning coordinated development.",
-            coordination_type="start_coordination"
+            coordination_type="start_coordination",
         )
 
-        self.logger.info(f"Collaborative delegation completed after {len(delegation_plan['negotiation_rounds'])} rounds")
+        self.logger.info(
+            f"Collaborative delegation completed after {len(delegation_plan['negotiation_rounds'])} rounds"
+        )
         return delegation_plan
 
     def _create_basic_flutter_breakdown(
-        self,
-        main_task: str,
-        agents: List[str],
-        collaboration_prompt: Optional[str]
+        self, main_task: str, agents: List[str], collaboration_prompt: Optional[str]
     ) -> List[Dict[str, Any]]:
         """Create basic Flutter app task breakdown."""
         # Basic Flutter development tasks
@@ -305,7 +324,7 @@ class SimpleDelegator:
                 "assigned_agent": None,
                 "dependencies": [],
                 "estimated_hours": 8,
-                "components": ["screens", "widgets", "navigation"]
+                "components": ["screens", "widgets", "navigation"],
             },
             {
                 "id": 2,
@@ -314,7 +333,7 @@ class SimpleDelegator:
                 "assigned_agent": None,
                 "dependencies": [],
                 "estimated_hours": 6,
-                "components": ["audio_service", "player_controls", "streaming"]
+                "components": ["audio_service", "player_controls", "streaming"],
             },
             {
                 "id": 3,
@@ -323,7 +342,7 @@ class SimpleDelegator:
                 "assigned_agent": None,
                 "dependencies": [],
                 "estimated_hours": 4,
-                "components": ["models", "providers", "storage"]
+                "components": ["models", "providers", "storage"],
             },
             {
                 "id": 4,
@@ -332,13 +351,15 @@ class SimpleDelegator:
                 "assigned_agent": None,
                 "dependencies": [1, 2, 3],
                 "estimated_hours": 3,
-                "components": ["integration", "testing", "debugging"]
-            }
+                "components": ["integration", "testing", "debugging"],
+            },
         ]
 
         # Assign based on collaboration prompt hints or agent names
         if collaboration_prompt:
-            role_assignments = self._parse_collaboration_roles(collaboration_prompt, agents)
+            role_assignments = self._parse_collaboration_roles(
+                collaboration_prompt, agents
+            )
             for subtask in subtasks:
                 for agent, roles in role_assignments.items():
                     if any(role.lower() in subtask["name"].lower() for role in roles):
@@ -349,9 +370,17 @@ class SimpleDelegator:
         for subtask in subtasks:
             if subtask["assigned_agent"] is None:
                 for agent in agents:
-                    if ("ui" in agent.lower() and "ui" in subtask["name"].lower()) or \
-                       ("audio" in agent.lower() and "audio" in subtask["name"].lower()) or \
-                       ("data" in agent.lower() and "data" in subtask["name"].lower()):
+                    if (
+                        ("ui" in agent.lower() and "ui" in subtask["name"].lower())
+                        or (
+                            "audio" in agent.lower()
+                            and "audio" in subtask["name"].lower()
+                        )
+                        or (
+                            "data" in agent.lower()
+                            and "data" in subtask["name"].lower()
+                        )
+                    ):
                         subtask["assigned_agent"] = agent
                         break
 
@@ -362,15 +391,13 @@ class SimpleDelegator:
         return subtasks
 
     def _parse_collaboration_roles(
-        self,
-        collaboration_prompt: str,
-        agents: List[str]
+        self, collaboration_prompt: str, agents: List[str]
     ) -> Dict[str, List[str]]:
         """Parse agent roles from collaboration prompt."""
         role_assignments = {}
 
         # Simple parsing - look for agent role descriptions
-        lines = collaboration_prompt.split('\n')
+        lines = collaboration_prompt.split("\n")
         current_agent = None
 
         for line in lines:
@@ -385,13 +412,25 @@ class SimpleDelegator:
                         break
 
             # Extract role keywords
-            if current_agent and ("focuses on" in line.lower() or "handles" in line.lower() or "manages" in line.lower()):
+            if current_agent and (
+                "focuses on" in line.lower()
+                or "handles" in line.lower()
+                or "manages" in line.lower()
+            ):
                 roles = []
                 if "ui" in line.lower() or "interface" in line.lower():
                     roles.append("UI")
-                if "audio" in line.lower() or "music" in line.lower() or "playback" in line.lower():
+                if (
+                    "audio" in line.lower()
+                    or "music" in line.lower()
+                    or "playback" in line.lower()
+                ):
                     roles.append("Audio")
-                if "data" in line.lower() or "state" in line.lower() or "model" in line.lower():
+                if (
+                    "data" in line.lower()
+                    or "state" in line.lower()
+                    or "model" in line.lower()
+                ):
                     roles.append("Data")
 
                 if roles and current_agent in role_assignments:
@@ -400,10 +439,7 @@ class SimpleDelegator:
         return role_assignments
 
     def _create_agent_proposal(
-        self,
-        agent: str,
-        main_task: str,
-        collaboration_prompt: Optional[str]
+        self, agent: str, main_task: str, collaboration_prompt: Optional[str]
     ) -> Dict[str, Any]:
         """Create a proposal for what an agent can contribute."""
         # Analyze agent name/role for capabilities
@@ -452,14 +488,11 @@ class SimpleDelegator:
             "focus_areas": focus_areas,
             "estimated_time": estimated_time,
             "dependencies": [],
-            "collaboration_notes": "Ready to coordinate with team members"
+            "collaboration_notes": "Ready to coordinate with team members",
         }
 
     def _create_adjustment_proposal(
-        self,
-        agent: str,
-        delegation_plan: Dict[str, Any],
-        round_num: int
+        self, agent: str, delegation_plan: Dict[str, Any], round_num: int
     ) -> Dict[str, Any]:
         """Create an adjusted proposal based on previous negotiation rounds."""
         # Get previous proposals
@@ -469,19 +502,33 @@ class SimpleDelegator:
                 if negotiation["agent"] == agent:
                     previous_proposals.append(negotiation["proposal"])
 
-        base_proposal = previous_proposals[-1] if previous_proposals else self._create_agent_proposal(
-            agent, delegation_plan["main_task"], delegation_plan["collaboration_prompt"]
+        base_proposal = (
+            previous_proposals[-1]
+            if previous_proposals
+            else self._create_agent_proposal(
+                agent,
+                delegation_plan["main_task"],
+                delegation_plan["collaboration_prompt"],
+            )
         )
 
         # Make adjustments based on round
         if round_num == 2:
             # Add coordination elements
-            base_proposal["contribution"] += " | Will coordinate interface definitions with team"
-            base_proposal["collaboration_notes"] = "Sharing interfaces early and requesting code reviews"
+            base_proposal[
+                "contribution"
+            ] += " | Will coordinate interface definitions with team"
+            base_proposal["collaboration_notes"] = (
+                "Sharing interfaces early and requesting code reviews"
+            )
         elif round_num == 3:
             # Final adjustments
-            base_proposal["contribution"] += " | Ready for final coordination and integration"
-            base_proposal["collaboration_notes"] = "Finalized approach, ready to begin development"
+            base_proposal[
+                "contribution"
+            ] += " | Ready for final coordination and integration"
+            base_proposal["collaboration_notes"] = (
+                "Finalized approach, ready to begin development"
+            )
 
         return base_proposal
 

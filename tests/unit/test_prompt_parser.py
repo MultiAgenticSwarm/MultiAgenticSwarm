@@ -1,10 +1,11 @@
 import pytest
+
 from multiagenticswarm.core.prompt_parser import parse_collaboration_prompt
 
 
 def test_parse_collaboration_prompt_structure():
     prompt = "UI and Backend agents work in parallel, then QA agent reviews both outputs. If issues found, relevant agent fixes them."
-    
+
     result = parse_collaboration_prompt(prompt)
 
     # Check top-level structure

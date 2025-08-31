@@ -5,8 +5,8 @@ Collaboration tools for multi-agent systems.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 from ..core.tool import Tool
 from ..utils.logger import get_logger
@@ -22,7 +22,9 @@ class ProgressBoard(Tool):
     Supports collaboration prompts and structured progress tracking.
     """
 
-    def __init__(self, board_file: str = "progress_board.json", workspace_dir: str = "."):
+    def __init__(
+        self, board_file: str = "progress_board.json", workspace_dir: str = "."
+    ):
         """
         Initialize the progress board.
 
@@ -40,7 +42,7 @@ class ProgressBoard(Tool):
         # Initialize the tool with multiple functions
         super().__init__(
             name="ProgressBoard",
-            description="Centralized communication board for agent collaboration"
+            description="Centralized communication board for agent collaboration",
         )
 
         # Add sub-functions as tool methods
@@ -60,7 +62,7 @@ class ProgressBoard(Tool):
             "report_progress": self.report_progress,
             "coordinate_with_team": self.coordinate_with_team,
             "share_code_snippet": self.share_code_snippet,
-            "get_recent_activity": self.get_recent_activity
+            "get_recent_activity": self.get_recent_activity,
         }
 
     def _ensure_board_exists(self):
@@ -70,21 +72,21 @@ class ProgressBoard(Tool):
                 "project": {
                     "name": "New Project",
                     "created_at": datetime.now().isoformat(),
-                    "collaboration_prompt": None
+                    "collaboration_prompt": None,
                 },
                 "agents": {},
                 "updates": [],
                 "interfaces": {},
                 "help_requests": [],
                 "progress_reports": [],
-                "last_updated": datetime.now().isoformat()
+                "last_updated": datetime.now().isoformat(),
             }
             self._save_board(initial_board)
 
     def _load_board(self) -> Dict[str, Any]:
         """Load the current progress board state."""
         try:
-            with open(self.board_file, 'r', encoding='utf-8') as f:
+            with open(self.board_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Error loading progress board: {e}")
@@ -94,7 +96,7 @@ class ProgressBoard(Tool):
         """Save the progress board state."""
         try:
             board_data["last_updated"] = datetime.now().isoformat()
-            with open(self.board_file, 'w', encoding='utf-8') as f:
+            with open(self.board_file, "w", encoding="utf-8") as f:
                 json.dump(board_data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error saving progress board: {e}")
@@ -108,7 +110,7 @@ class ProgressBoard(Tool):
             "interfaces": {},
             "help_requests": [],
             "progress_reports": [],
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
     def set_collaboration_prompt(self, prompt: str) -> Dict[str, Any]:
@@ -129,7 +131,7 @@ class ProgressBoard(Tool):
         return {
             "success": True,
             "message": "Collaboration prompt set successfully",
-            "prompt_length": len(prompt)
+            "prompt_length": len(prompt),
         }
 
     def get_collaboration_prompt(self) -> Dict[str, Any]:
@@ -145,7 +147,7 @@ class ProgressBoard(Tool):
         return {
             "collaboration_prompt": prompt,
             "has_prompt": prompt is not None,
-            "project_name": board["project"].get("name", "Unknown")
+            "project_name": board["project"].get("name", "Unknown"),
         }
 
     def post_update(
@@ -158,7 +160,7 @@ class ProgressBoard(Tool):
         code_snippet: Optional[str] = None,
         file_path: Optional[str] = None,
         language: Optional[str] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Post an update to the progress board.
@@ -187,7 +189,7 @@ class ProgressBoard(Tool):
                 "last_active": datetime.now().isoformat(),
                 "total_updates": 0,
                 "current_task": None,
-                "progress": 0
+                "progress": 0,
             }
 
         # Create update entry
@@ -203,7 +205,7 @@ class ProgressBoard(Tool):
             "code_snippet": code_snippet,
             "file_path": file_path,
             "language": language,
-            "tags": tags or []
+            "tags": tags or [],
         }
 
         # Add to updates
@@ -224,7 +226,7 @@ class ProgressBoard(Tool):
         return {
             "success": True,
             "update_id": update["id"],
-            "timestamp": update["timestamp"]
+            "timestamp": update["timestamp"],
         }
 
     def read_updates(
@@ -232,7 +234,7 @@ class ProgressBoard(Tool):
         since_timestamp: Optional[str] = None,
         agent_filter: Optional[str] = None,
         type_filter: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
     ) -> Dict[str, Any]:
         """
         Read updates from the progress board.
@@ -265,7 +267,7 @@ class ProgressBoard(Tool):
         return {
             "updates": updates,
             "total_count": len(updates),
-            "board_last_updated": board["last_updated"]
+            "board_last_updated": board["last_updated"],
         }
 
     def get_project_status(self) -> Dict[str, Any]:
@@ -283,7 +285,9 @@ class ProgressBoard(Tool):
             if agent_info.get("progress", 0) > 0:
                 agent_progresses.append(agent_info["progress"])
 
-        overall_progress = sum(agent_progresses) / len(agent_progresses) if agent_progresses else 0
+        overall_progress = (
+            sum(agent_progresses) / len(agent_progresses) if agent_progresses else 0
+        )
 
         # Get recent activity
         recent_updates = board["updates"][-10:] if board["updates"] else []
@@ -302,10 +306,12 @@ class ProgressBoard(Tool):
             "recent_updates": recent_updates,
             "update_counts": update_counts,
             "active_agents": [
-                name for name, info in board["agents"].items()
+                name
+                for name, info in board["agents"].items()
                 if info.get("current_task") is not None
             ],
-            "collaboration_prompt_set": board["project"].get("collaboration_prompt") is not None
+            "collaboration_prompt_set": board["project"].get("collaboration_prompt")
+            is not None,
         }
 
     def share_interface(
@@ -313,7 +319,7 @@ class ProgressBoard(Tool):
         agent_name: str,
         interface_name: str,
         methods: List[str],
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Share an API interface definition with other agents.
@@ -334,7 +340,7 @@ class ProgressBoard(Tool):
             "methods": methods,
             "description": description,
             "shared_by": agent_name,
-            "shared_at": datetime.now().isoformat()
+            "shared_at": datetime.now().isoformat(),
         }
 
         board["interfaces"][interface_name] = interface_def
@@ -344,7 +350,7 @@ class ProgressBoard(Tool):
             agent_name=agent_name,
             message=f"Shared interface definition: {interface_name}",
             update_type="interface_sharing",
-            tags=["interface", "api"]
+            tags=["interface", "api"],
         )
 
         self._save_board(board)
@@ -353,7 +359,7 @@ class ProgressBoard(Tool):
         return {
             "success": True,
             "interface_name": interface_name,
-            "methods_count": len(methods)
+            "methods_count": len(methods),
         }
 
     def request_help(
@@ -362,7 +368,7 @@ class ProgressBoard(Tool):
         topic: str,
         details: str,
         target_agent: Optional[str] = None,
-        priority: str = "normal"
+        priority: str = "normal",
     ) -> Dict[str, Any]:
         """
         Request help from other agents.
@@ -388,7 +394,7 @@ class ProgressBoard(Tool):
             "priority": priority,
             "status": "open",
             "created_at": datetime.now().isoformat(),
-            "responses": []
+            "responses": [],
         }
 
         board["help_requests"].append(help_request)
@@ -399,24 +405,20 @@ class ProgressBoard(Tool):
             agent_name=agent_name,
             message=f"Requesting help{target_msg}: {topic}",
             update_type="help_request",
-            tags=["help", priority]
+            tags=["help", priority],
         )
 
         self._save_board(board)
 
         logger.info(f"Help request posted by {agent_name}: {topic}")
-        return {
-            "success": True,
-            "request_id": help_request["id"],
-            "status": "posted"
-        }
+        return {"success": True, "request_id": help_request["id"], "status": "posted"}
 
     def respond_to_help(
         self,
         agent_name: str,
         request_id: int,
         response: str,
-        code_provided: bool = False
+        code_provided: bool = False,
     ) -> Dict[str, Any]:
         """
         Respond to a help request.
@@ -447,7 +449,7 @@ class ProgressBoard(Tool):
             "responding_agent": agent_name,
             "response": response,
             "code_provided": code_provided,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         help_request["responses"].append(response_entry)
@@ -458,7 +460,7 @@ class ProgressBoard(Tool):
             agent_name=agent_name,
             message=f"Provided help to {requesting_agent}: {help_request['topic']}",
             update_type="help_response",
-            tags=["help", "collaboration"]
+            tags=["help", "collaboration"],
         )
 
         self._save_board(board)
@@ -467,7 +469,7 @@ class ProgressBoard(Tool):
         return {
             "success": True,
             "request_id": request_id,
-            "response_count": len(help_request["responses"])
+            "response_count": len(help_request["responses"]),
         }
 
     def report_progress(
@@ -476,7 +478,7 @@ class ProgressBoard(Tool):
         task: str,
         percentage: int,
         details: str,
-        estimated_completion: Optional[str] = None
+        estimated_completion: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Report task progress.
@@ -499,7 +501,7 @@ class ProgressBoard(Tool):
             "percentage": percentage,
             "details": details,
             "estimated_completion": estimated_completion,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         board["progress_reports"].append(progress_report)
@@ -511,24 +513,20 @@ class ProgressBoard(Tool):
             task=task,
             progress=percentage,
             update_type="progress_report",
-            tags=["progress"]
+            tags=["progress"],
         )
 
         self._save_board(board)
 
         logger.info(f"Progress reported by {agent_name}: {task} at {percentage}%")
-        return {
-            "success": True,
-            "current_progress": percentage,
-            "task": task
-        }
+        return {"success": True, "current_progress": percentage, "task": task}
 
     def coordinate_with_team(
         self,
         agent_name: str,
         message: str,
         coordination_type: str = "general",
-        target_agents: Optional[List[str]] = None
+        target_agents: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Post coordination message to team.
@@ -548,7 +546,7 @@ class ProgressBoard(Tool):
             agent_name=agent_name,
             message=f"[COORDINATION{target_info}] {message}",
             update_type="coordination",
-            tags=["coordination", coordination_type]
+            tags=["coordination", coordination_type],
         )
 
     def share_code_snippet(
@@ -557,7 +555,7 @@ class ProgressBoard(Tool):
         snippet: str,
         description: str,
         language: str = "dart",
-        file_path: Optional[str] = None
+        file_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Share a code snippet with the team.
@@ -579,7 +577,7 @@ class ProgressBoard(Tool):
             code_snippet=snippet,
             file_path=file_path,
             language=language,
-            tags=["code", language, file_path] if file_path else ["code", language]
+            tags=["code", language, file_path] if file_path else ["code", language],
         )
 
     def get_recent_activity(self, hours: int = 24) -> Dict[str, Any]:
@@ -596,13 +594,11 @@ class ProgressBoard(Tool):
 
         # Calculate cutoff time
         from datetime import datetime, timedelta
+
         cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()
 
         # Filter recent updates
-        recent_updates = [
-            u for u in board["updates"]
-            if u["timestamp"] > cutoff
-        ]
+        recent_updates = [u for u in board["updates"] if u["timestamp"] > cutoff]
 
         # Group by agent
         agent_activity = {}
@@ -617,11 +613,13 @@ class ProgressBoard(Tool):
             "total_updates": len(recent_updates),
             "active_agents": len(agent_activity),
             "agent_activity": agent_activity,
-            "recent_updates": recent_updates[-10:]  # Last 10 updates
+            "recent_updates": recent_updates[-10:],  # Last 10 updates
         }
 
 
-def create_progress_board_tool(board_file: str = "progress_board.json", workspace_dir: str = ".") -> ProgressBoard:
+def create_progress_board_tool(
+    board_file: str = "progress_board.json", workspace_dir: str = "."
+) -> ProgressBoard:
     """
     Create a ProgressBoard tool instance.
 
