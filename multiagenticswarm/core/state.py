@@ -9,7 +9,7 @@ for all data flowing through the multi-agent system. The state is designed to be
 - Extensible for future needs
 """
 
-from typing import Any, Dict, List, Optional, TypedDict, Union, Literal
+from typing import Any, Dict, List, Optional, TypedDict, Union
 from typing_extensions import Annotated
 from datetime import datetime
 import re
