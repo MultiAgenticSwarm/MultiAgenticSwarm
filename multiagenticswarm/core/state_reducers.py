@@ -9,7 +9,8 @@ Reducers ensure consistent and predictable state merging behavior while
 preserving important historical information and resolving conflicts intelligently.
 """
 
-from typing import Any, Dict, List, Optional, Union, Callable
+from typing import Any, Dict, List, Optional, Union
+from collections.abc import Callable
 from datetime import datetime, timezone
 import copy
 import uuid
