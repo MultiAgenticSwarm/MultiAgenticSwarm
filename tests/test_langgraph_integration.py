@@ -110,8 +110,8 @@ class TestLangGraphStateFlow:
         assert updated_state["current_agent"] == "data_analyzer"
         assert updated_state["agent_status"]["data_analyzer"] == "active"
         assert "data_analyzer" in updated_state["agent_outputs"]
-        # Note: Messages are merged via the enhanced reducers' merge_states function, resulting in 1 total message (node message replaces initial)
-        assert len(updated_state["messages"]) == 1  # node message replaces initial
+        # Note: Messages are merged via the enhanced reducers' merge_states function, resulting in 2 total messages (initial + node message are accumulated)
+        assert len(updated_state["messages"]) == 2  # initial + node message are accumulated
         assert len(updated_state["execution_trace"]) > 1  # initial + logged change
     
     def test_multi_node_workflow(self):
