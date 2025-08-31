@@ -302,13 +302,6 @@ def test_complete_workflow_simulation():
     assert deserialized["collaboration_prompt"] == state["collaboration_prompt"]
     assert len(deserialized["agent_outputs"]) == len(state["agent_outputs"])
     assert deserialized["should_continue"] == state["should_continue"]
-    
-    print("✅ Complete workflow simulation successful!")
-    print(f"   - {len(state['agent_outputs'])} agents participated")
-    print(f"   - {len(state['messages'])} messages in conversation") 
-    print(f"   - {len(state['tool_calls'])} tools executed")
-    print(f"   - {len(state['execution_trace'])} events traced")
-    print(f"   - All {len(state['task_progress'])} tasks completed")
 
 
 def test_state_field_completeness():
@@ -350,8 +343,6 @@ def test_state_field_completeness():
     
     # Verify we have exactly the expected number of fields
     assert len(state) == len(expected_fields), f"Expected {len(expected_fields)} fields, got {len(state)}"
-    
-    print(f"✅ All {len(expected_fields)} state fields present and accessible")
 
 
 def test_reducer_integration():
@@ -387,12 +378,9 @@ def test_reducer_integration():
     
     # Permissions should be intersection (security-first)
     assert set(final_state["tool_permissions"]["agent1"]) == {"tool1"}
-    
-    print("✅ All reducers integrate correctly with conflict resolution")
 
 
 if __name__ == "__main__":
     test_complete_workflow_simulation()
     test_state_field_completeness()
     test_reducer_integration()
-    print("\n🎉 All integration tests passed! State management system is fully functional.")

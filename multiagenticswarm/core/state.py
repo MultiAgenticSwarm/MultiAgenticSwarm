@@ -9,7 +9,7 @@ for all data flowing through the multi-agent system. The state is designed to be
 - Extensible for future needs
 """
 
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union, Callable
 from typing_extensions import Annotated
 from datetime import datetime
 import re
@@ -649,7 +649,7 @@ def is_compatible_version(state_version: str, required_version: str) -> bool:
 
 
 # Migration function registry
-_MIGRATION_FUNCTIONS: Dict[str, callable] = {}
+_MIGRATION_FUNCTIONS: Dict[str, Callable] = {}
 
 
 def register_migration(from_version: str, to_version: str):
