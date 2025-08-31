@@ -14,6 +14,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 import copy
 import uuid
+import inspect
 
 from ..utils.logger import get_logger
 
@@ -735,7 +736,6 @@ def apply_reducer(field_name: str, current: Any, update: Any, **kwargs) -> Any:
         
         # Pass additional kwargs to reducer if it supports them
         try:
-            import inspect
             sig = inspect.signature(reducer_func)
             if len(sig.parameters) > 2:  # More than just current and update
                 return reducer_func(current, update, **kwargs)
