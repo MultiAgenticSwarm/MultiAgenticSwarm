@@ -501,6 +501,10 @@ def merge_communication_messages(
     
     merged = copy.deepcopy(current) if current else []
     
+    # Handle explicit empty list update - this clears the list
+    if update is not None and len(update) == 0:
+        return []
+    
     if not update:
         return merged
     
