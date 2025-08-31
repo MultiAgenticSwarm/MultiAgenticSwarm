@@ -465,7 +465,8 @@ class TestStateReducerRegistry:
         
         result = apply_reducer("unknown_field", current, update)
         
-        assert result == "current_value"
+        # With enhanced last-write-wins, None can override existing values
+        assert result is None
         
     def test_merge_states_multiple_fields(self):
         """Test merging multiple state fields."""
@@ -517,6 +518,27 @@ class TestReducerEdgeCases:
         assert resolve_permissions(None, None) == {}
         assert resolve_permissions({}, None) == {}
         assert resolve_permissions(None, {"agent1": ["tool1"]}) == {"agent1": ["tool1"]}
+
+    def test_merge_communication_messages_empty_list_clearing(self):
+        """Test that empty list updates clear the current messages."""
+        from multiagenticswarm.core.state_reducers import merge_communication_messages
+        
+        # Start with some messages
+        current = [
+            {"id": "msg1", "message": "first message"},
+            {"id": "msg2", "message": "second message"}
+        ]
+        
+        # Verify we have messages
+        assert len(current) == 2
+        
+        # Clear with empty list
+        result = merge_communication_messages(current, [])
+        assert len(result) == 0
+        
+        # Test that None update doesn't clear
+        result = merge_communication_messages(current, None)
+        assert len(result) == 2
 
 
 if __name__ == "__main__":
