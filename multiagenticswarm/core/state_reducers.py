@@ -386,12 +386,14 @@ REDUCERS = {
     "task_progress": aggregate_progress,
     "tool_permissions": resolve_permissions,
     "tool_results": merge_tool_results,
+    "tool_calls": merge_communication_messages,  # Tool calls are lists that should be merged
     "short_term_memory": merge_memory_layers,
     "working_memory": merge_memory_layers,
     "shared_memory": merge_memory_layers,
     "agent_messages": merge_communication_messages,
     "help_requests": merge_communication_messages,
     "broadcast_messages": merge_communication_messages,
+    "pending_responses": merge_communication_messages,
     "execution_trace": merge_execution_trace,
     "error_log": merge_execution_trace,
 }
