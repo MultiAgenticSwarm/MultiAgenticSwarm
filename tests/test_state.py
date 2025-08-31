@@ -465,7 +465,8 @@ class TestStateReducerRegistry:
         
         result = apply_reducer("unknown_field", current, update)
         
-        assert result == "current_value"
+        # With enhanced last-write-wins, None can override existing values
+        assert result is None
         
     def test_merge_states_multiple_fields(self):
         """Test merging multiple state fields."""

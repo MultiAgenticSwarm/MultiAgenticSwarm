@@ -740,9 +740,9 @@ def apply_reducer(field_name: str, current: Any, update: Any, **kwargs) -> Any:
             logger.error(f"Failed to apply reducer for field '{field_name}': {str(e)}")
             raise ReducerError(f"Reducer application failed for field '{field_name}': {str(e)}") from e
     else:
-        # Default behavior: last write wins
+        # Default behavior: last write wins (including None values)
         logger.debug(f"No custom reducer for field '{field_name}', using last-write-wins")
-        return update if update is not None else current
+        return update
 
 
 @safe_reducer
