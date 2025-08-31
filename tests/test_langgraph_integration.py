@@ -110,7 +110,7 @@ class TestLangGraphStateFlow:
         assert updated_state["current_agent"] == "data_analyzer"
         assert updated_state["agent_status"]["data_analyzer"] == "active"
         assert "data_analyzer" in updated_state["agent_outputs"]
-        # Note: Messages get added via LangGraph's add_messages reducer, creating 1 total message
+        # Note: Messages are merged via the enhanced reducers' merge_states function, resulting in 1 total message (node message replaces initial)
         assert len(updated_state["messages"]) == 1  # node message replaces initial
         assert len(updated_state["execution_trace"]) > 1  # initial + logged change
     
