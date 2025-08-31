@@ -112,13 +112,7 @@ def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
             # First output from this agent
             merged[agent_id] = {
                 "current": output,
-                "history": [
-                    {
-                        "output": output,
-                        "timestamp": timestamp,
-                        "version": 1
-                    }
-                ],
+                "history": [],
                 "last_updated": timestamp,
                 "total_outputs": 1
             }
