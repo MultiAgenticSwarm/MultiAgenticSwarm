@@ -325,9 +325,7 @@ class TestLangGraphStateFlow:
         assert state["interrupt_checkpoint"] == "awaiting_approval"
         assert len(state["pending_responses"]) == 1
         
-        # Simulate human approval - clear pending responses by using empty list update
-        # Since pending_responses uses merge_communication_messages, we simulate clearing
-        # by using a different approach 
+        # Simulate human approval and clear pending responses
         approval_updates = {
             "requires_human_approval": False,
             "interrupt_checkpoint": None
