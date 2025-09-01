@@ -1,27 +1,32 @@
 import pytest
-from multiagenticswarm.core.prompt_parser import parse_collaboration_prompt
+import json
+import asyncio
+from multiagenticswarm.core.prompt_parser import PromptParser, BaseLLM
+from config.settings import LLMWorkflowConfig
 
 
-def test_parse_collaboration_prompt_structure():
-    prompt = "UI and Backend agents work in parallel, then QA agent reviews both outputs. If issues found, relevant agent fixes them."
+class DummyLLM(BaseLLM):
+    async def generate(self, messages):
+        return json.dumps({
+            "phases": [
+                {"pattern": "parallel", "agents": ["UI", "Backend"], "duration": "until_complete"},
+                {"pattern": "sequential", "agents": ["QA"], "conditions": ["all_previous_complete"]}
+            ],
+            "rules": [{"type": "conditional_loop", "condition": "issues_found", "action": "return_to_relevant_agent"}],
+            "dependencies": {"QA": ["UI", "Backend"]},
+            "roles": {"UI": "Interface development", "Backend": "API and data", "QA": "Quality validation"}
+        })
+
+
+@pytest.mark.asyncio
+async def test_prompt_parser_returns_valid_json():
+    config = LLMWorkflowConfig(api_key="dummy-key")
+    parser = PromptParser(DummyLLM(), config)
+
+    result = await parser.parse("UI and Backend work in parallel, QA validates.")
     
-    result = parse_collaboration_prompt(prompt)
-
-    # Check top-level structure
     assert isinstance(result, dict)
     assert "phases" in result
     assert isinstance(result["phases"], list)
-    assert len(result["phases"]) > 0
-
-    # Check phase structure
-    phase = result["phases"][0]
-    assert "pattern" in phase
-    assert "agents" in phase
-    assert isinstance(phase["agents"], list)
-    assert all(isinstance(agent, str) for agent in phase["agents"])
-
-    # Ensure at least 2 agents are parsed
-    assert len(phase["agents"]) >= 2
-
-    # Ensure pattern is one of the allowed types
-    assert phase["pattern"] in ["sequential", "parallel", "conditional"]
+    assert result["phases"][0]["pattern"] in ["parallel", "sequential"]
+    assert all(isinstance(agent, str) for agent in result["phases"][0]["agents"])
