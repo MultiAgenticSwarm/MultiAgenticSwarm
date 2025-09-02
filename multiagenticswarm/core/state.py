@@ -170,7 +170,10 @@ class AgentState(TypedDict):
     recursion_limit: int
 
     # ========== Streaming Support ==========
-    # 'values', 'updates', 'debug'
+    # stream_mode options:
+    #   'values'  - Stream the current values of the agent state as they change.
+    #   'updates' - Stream incremental updates to the agent state (diffs/patches).
+    #   'debug'   - Stream detailed debug information for troubleshooting and analysis.
     stream_mode: Optional[str]
     # For streaming partial state
     partial_updates: List[Dict[str, Any]]
