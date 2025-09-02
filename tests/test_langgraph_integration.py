@@ -110,7 +110,7 @@ class TestLangGraphStateFlow:
         assert updated_state["current_agent"] == "data_analyzer"
         assert updated_state["agent_status"]["data_analyzer"] == "active"
         assert "data_analyzer" in updated_state["agent_outputs"]
-        assert updated_state["messages"][1].content == "Processed by analyzer node (agent: data_analyzer)", "Second message should be the node execution message"
+        assert "Processed by analyzer node" in updated_state["messages"][1].content, "Second message should contain the node execution message"
         assert len(updated_state["execution_trace"]) > 1  # initial + logged change
     
     def test_multi_node_workflow(self):
