@@ -954,8 +954,8 @@ def validate_reducer_performance(field_name: str, data_size: int, iterations: in
         # Update data represents incoming changes (typically smaller)
         update_data = generate_test_data(data_size // 2)
         
-        logger.debug(f"Generated test data: current={len(current_data) if hasattr(current_data, '__len__') else 'N/A'} items, "
-                    f"update={len(update_data) if hasattr(update_data, '__len__') else 'N/A'} items")
+        logger.debug(f"Generated test data: current={len(current_data)} items, "
+                    f"update={len(update_data)} items")
         
     except Exception as e:
         logger.error(f"Failed to generate test data for field '{field_name}': {str(e)}")
