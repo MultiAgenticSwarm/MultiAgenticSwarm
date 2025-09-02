@@ -6,7 +6,7 @@
 
 ### **Ticket #1: Create Core State Schema**
 **Priority:** 🔴 Critical  
-**Story Points:** 5  
+**Story Points:** 8 (increased due to additional fields)  
 **Dependencies:** None  
 **Assignee:** Can be worked independently
 
@@ -38,6 +38,41 @@ Define AgentState TypedDict with fields for:
 - Inter-agent communication
 - Memory layers (working, short-term)
 
+**Essential LangGraph Fields:**
+```python
+# ========== Thread & Checkpoint Management ==========
+thread_id: Optional[str]  # Unique conversation identifier
+checkpoint_id: Optional[str]  # Current checkpoint ID
+checkpoint_ts: Optional[str]  # Checkpoint timestamp
+parent_checkpoint_id: Optional[str]  # For checkpoint lineage
+checkpoint_ns: Optional[str]  # Namespace for isolation
+checkpoint_metadata: Dict[str, Any]  # Checkpoint-specific metadata
+is_resuming: bool  # Whether resuming from checkpoint
+
+# ========== Graph Execution Context ==========
+graph_path: List[str]  # Current path through the graph
+pending_tasks: List[str]  # Tasks in other branches
+branch_results: Dict[str, Any]  # Results from parallel branches
+channel_values: Dict[str, Any]  # LangGraph channel system
+config: Optional[Dict[str, Any]]  # LangGraph RunnableConfig
+recursion_limit: int  # Prevent infinite loops (default: 25)
+
+# ========== Streaming Support ==========
+stream_mode: Optional[str]  # 'values', 'updates', 'debug'
+partial_updates: List[Dict[str, Any]]  # For streaming partial state
+stream_metadata: Dict[str, Any]  # Streaming-specific metadata
+
+# ========== Subgraph Context ==========
+subgraph_states: Dict[str, Any]  # States from subgraphs
+parent_graph_id: Optional[str]  # Parent graph if this is a subgraph
+subgraph_configs: Dict[str, Any]  # Subgraph-specific configs
+
+# ========== Enhanced Interrupts ==========
+interrupt_before: List[str]  # Nodes to interrupt before
+interrupt_after: List[str]  # Nodes to interrupt after
+pending_human_input: Optional[Dict[str, Any]]  # Awaiting human input
+```
+
 #### **Example:**
 ```
 Before: Agent writes update to JSON file
@@ -47,9 +82,18 @@ After: Agent updates state["updates"] field directly
 #### **Success Criteria:**
 - [ ] State schema defined with proper typing
 - [ ] All necessary fields included
+- [ ] **Thread management fields functional**
+- [ ] **LangGraph config fields integrated**
+- [ ] **Streaming support fields added**
 - [ ] Reducers for message and list merging
+- [ ] **Register add_messages in REDUCERS dict**
 - [ ] State can be serialized for checkpointing
 - [ ] Documentation with field descriptions
+
+#### **Additional Implementation Notes:**
+- In `reducers.py`, add `add_messages` to REDUCERS registry
+- Update `create_initial_state()` to initialize new fields properly
+- Ensure `validate_state()` checks new fields
 
 ---
 
@@ -154,7 +198,7 @@ Output: {
 
 ### **Ticket #4: Create Runtime Graph Compiler**
 **Priority:** 🔴 Critical  
-**Story Points:** 13  
+**Story Points:** 15 (increased for config handling)  
 **Dependencies:** #1, #3  
 **Assignee:** Needs state schema and parser
 
@@ -184,11 +228,34 @@ Build a compiler that dynamically creates LangGraph StateGraphs from parsed coll
 Compiler will:
 1. Take parsed prompt structure
 2. Create StateGraph with nodes for each agent
-3. Add router nodes for decisions
-4. Wire edges based on pattern
-5. Add conditional edges for rules
-6. Compile with checkpointer
-7. Cache compiled result
+3. **Set recursion_limit from config or default to 25**
+4. **Configure streaming modes if specified**
+5. **Initialize thread_id for new conversations**
+6. Add router nodes for decisions
+7. Wire edges based on pattern
+8. Add conditional edges for rules
+9. **Pass RunnableConfig through compilation**
+10. Compile with checkpointer
+11. Cache compiled result
+
+#### **Additional Requirements:**
+```python
+def compile_graph(
+    parsed_prompt: Dict,
+    agents: Dict[str, Agent],
+    thread_id: Optional[str] = None,  # NEW
+    config: Optional[RunnableConfig] = None,  # NEW
+    stream_mode: Optional[str] = None,  # NEW
+    recursion_limit: int = 25  # NEW
+) -> CompiledGraph:
+    # Ensure thread_id is set
+    if not thread_id:
+        thread_id = str(uuid.uuid4())
+    
+    # Set up config with recursion limit
+    if not config:
+        config = RunnableConfig(recursion_limit=recursion_limit)
+```
 
 #### **Example:**
 ```
@@ -198,12 +265,16 @@ Output: Compiled StateGraph with:
 - Parallel agent nodes
 - Aggregator collecting results
 - All wired with appropriate edges
+- Proper thread and config management
 ```
 
 #### **Success Criteria:**
 - [ ] Generates graphs from parsed prompts
 - [ ] Supports all collaboration patterns
 - [ ] Handles dynamic agent lists
+- [ ] **Thread ID initialization functional**
+- [ ] **RunnableConfig integration works**
+- [ ] **Recursion limit properly set**
 - [ ] Includes checkpointing
 - [ ] Graph caching works
 
@@ -348,6 +419,12 @@ Each agent can have internal nodes:
 - Validator (checks quality)
 - Tool Coordinator (manages tools)
 - Output Formatter (prepares response)
+
+**Subgraph State Management:**
+- **Maintain its own subgraph_state in parent state**
+- **Track parent_graph_id for nested execution**
+- **Pass channel_values between internal nodes**
+- Support streaming partial updates from internal nodes
 
 #### **Example:**
 ```
@@ -618,6 +695,30 @@ Integrate LangGraph's SQLite checkpointer for automatic state persistence and re
 - Automatic checkpointing after nodes
 - Thread-based isolation
 - Checkpoint management utilities
+
+**Enhanced Checkpointing with Thread Support:**
+```python
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+# Initialize with thread support
+checkpointer = SqliteSaver.from_conn_string(":memory:")
+
+# Ensure state includes thread_id
+def save_checkpoint(state: AgentState):
+    if not state.get("thread_id"):
+        raise ValueError("thread_id required for checkpointing")
+    
+    # Save with thread isolation
+    checkpointer.put(
+        config={"configurable": {"thread_id": state["thread_id"]}},
+        checkpoint=state,
+        metadata={
+            "checkpoint_id": state.get("checkpoint_id"),
+            "checkpoint_ns": state.get("checkpoint_ns"),
+            "parent_checkpoint_id": state.get("parent_checkpoint_id")
+        }
+    )
+```
 
 #### **Example:**
 ```
@@ -925,6 +1026,24 @@ Implement interrupt points using LangGraph's built-in interrupt feature for huma
 - Manual interrupt capability
 - State modification during pause
 
+**Enhanced Interrupt Configuration:**
+Interrupt configuration must:
+- **Use state fields interrupt_before and interrupt_after**
+- **Store pending input in pending_human_input field**
+- **Set is_resuming flag when continuing**
+
+```python
+# Configure interrupts in graph compilation
+graph = StateGraph(AgentState)
+
+# Add interrupt configuration
+for node in state.get("interrupt_before", []):
+    graph.add_interrupt_before(node)
+
+for node in state.get("interrupt_after", []):
+    graph.add_interrupt_after(node)
+```
+
 #### **Example:**
 ```
 Interrupt flow:
@@ -1028,6 +1147,13 @@ Trace records:
 - Tool calls made
 - Decisions taken
 - Errors encountered
+
+**Enhanced Tracing for LangGraph:**
+The tracer should also capture:
+- **Stream mode and partial updates**
+- **Thread ID for each execution**
+- **Graph path traversal**
+- **Channel value changes**
 
 #### **Example:**
 ```
@@ -1308,7 +1434,7 @@ Test: Dynamic pattern change
 ## **Ticket Dependencies & Timeline**
 
 ### **Phase 1 (Week 1-2): Foundation**
-- #1 State Schema (Independent)
+- #1 State Schema (Independent) - **Critical: Must include all LangGraph fields**
 - #3 Prompt Parser (Independent)
 - #8 Agent Registry (Independent)
 - #20 Execution Tracer (Independent)
@@ -1317,13 +1443,13 @@ Test: Dynamic pattern change
 ### **Phase 2 (Week 3-4): Core Refactoring**
 - #6 Agent as Node (Needs #1)
 - #9 Tool System (Needs #1)
-- #12 Checkpointing (Needs #1)
+- #12 Checkpointing (Needs #1) - **Must use thread_id for isolation**
 - #2 State Migration (Needs #1)
 
 ### **Phase 3 (Week 5-6): Graph System**
-- #4 Graph Compiler (Needs #1, #3)
+- #4 Graph Compiler (Needs #1, #3) - **Must handle config and thread initialization**
 - #5 Hot-Swapping (Needs #4)
-- #7 Agent Subgraphs (Needs #6)
+- #7 Agent Subgraphs (Needs #6) - **Must manage subgraph states properly**
 - #16 Patterns (Needs #4)
 - #17 Routers (Needs #16)
 
@@ -1333,7 +1459,7 @@ Test: Dynamic pattern change
 - #13 Memory Layers (Needs #12)
 - #14 Communication (Needs #1)
 - #15 Rules Engine (Needs #3, #4)
-- #18 Interrupts (Needs #4)
+- #18 Interrupts (Needs #4) - **Must use new interrupt fields**
 - #19 Human Interface (Needs #18)
 
 ### **Phase 5 (Week 8): Polish & Testing**
@@ -1341,5 +1467,7 @@ Test: Dynamic pattern change
 - #22 Studio Adapter (Needs #4)
 - #24 Safe Points (Needs #23)
 - #25 Integration Tests (Needs all)
+
+**Critical Note:** Ticket #1 is the foundation for everything. Without the proper LangGraph fields in the state schema, many other tickets will fail or produce incorrect behavior. Implement these changes before moving to Phase 2.
 
 This structure ensures maximum parallel development while respecting critical dependencies.
