@@ -973,4 +973,4 @@ def auto_migrate_state(state: Dict[str, Any]) -> Dict[str, Any]:
     except StateVersionError as e:
         logger.error(f"Auto-migration failed: {e}")
         logger.info("State left unchanged due to migration failure")
-        return state  # Return original state if migration fails
+        raise  # Raise the exception to alert users of incompatibility
