@@ -1017,7 +1017,11 @@ def validate_reducer_performance(field_name: str, data_size: int, iterations: in
         "min_time": min_time,
         "max_time": max_time,
         "total_time": total_time,
-        "reducer_strategy": REDUCERS[field_name].get("strategy", "unknown"),
+        "reducer_strategy": (
+            REDUCERS.get(field_name).get("strategy", "unknown")
+            if isinstance(REDUCERS.get(field_name), dict)
+            else "unknown"
+        ),
         "data_pattern": _get_data_pattern_description(field_name)
     }
 
