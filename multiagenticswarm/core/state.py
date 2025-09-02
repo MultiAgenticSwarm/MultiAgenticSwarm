@@ -139,6 +139,60 @@ class AgentState(TypedDict):
     # Execution mode: sequential/parallel/supervisor
     execution_mode: str
     
+    # ========== Thread & Checkpoint Management ==========
+    # Unique conversation identifier
+    thread_id: Optional[str]
+    # Current checkpoint ID
+    checkpoint_id: Optional[str]
+    # Checkpoint timestamp
+    checkpoint_ts: Optional[str]
+    # For checkpoint lineage
+    parent_checkpoint_id: Optional[str]
+    # Namespace for isolation
+    checkpoint_ns: Optional[str]
+    # Checkpoint-specific metadata
+    checkpoint_metadata: Dict[str, Any]
+    # Whether resuming from checkpoint
+    is_resuming: bool
+
+    # ========== Graph Execution Context ==========
+    # Current path through the graph
+    graph_path: List[str]
+    # Tasks in other branches
+    pending_tasks: List[str]
+    # Results from parallel branches
+    branch_results: Dict[str, Any]
+    # LangGraph channel system
+    channel_values: Dict[str, Any]
+    # LangGraph RunnableConfig
+    config: Optional[Dict[str, Any]]
+    # Prevent infinite loops (default: 25)
+    recursion_limit: int
+
+    # ========== Streaming Support ==========
+    # 'values', 'updates', 'debug'
+    stream_mode: Optional[str]
+    # For streaming partial state
+    partial_updates: List[Dict[str, Any]]
+    # Streaming-specific metadata
+    stream_metadata: Dict[str, Any]
+
+    # ========== Subgraph Context ==========
+    # States from subgraphs
+    subgraph_states: Dict[str, Any]
+    # Parent graph if this is a subgraph
+    parent_graph_id: Optional[str]
+    # Subgraph-specific configs
+    subgraph_configs: Dict[str, Any]
+
+    # ========== Enhanced Interrupts ==========
+    # Nodes to interrupt before
+    interrupt_before: List[str]
+    # Nodes to interrupt after
+    interrupt_after: List[str]
+    # Awaiting human input
+    pending_human_input: Optional[Dict[str, Any]]
+
     # ========== Debugging & Monitoring ==========
     # Schema version for compatibility checking
     state_version: str
@@ -222,6 +276,38 @@ def create_initial_state(
         "resume_point": None,
         "execution_mode": "sequential",
         
+        # Thread & Checkpoint Management
+        "thread_id": None,
+        "checkpoint_id": None,
+        "checkpoint_ts": None,
+        "parent_checkpoint_id": None,
+        "checkpoint_ns": None,
+        "checkpoint_metadata": {},
+        "is_resuming": False,
+        
+        # Graph Execution Context
+        "graph_path": [],
+        "pending_tasks": [],
+        "branch_results": {},
+        "channel_values": {},
+        "config": None,
+        "recursion_limit": 25,
+        
+        # Streaming Support
+        "stream_mode": None,
+        "partial_updates": [],
+        "stream_metadata": {},
+        
+        # Subgraph Context
+        "subgraph_states": {},
+        "parent_graph_id": None,
+        "subgraph_configs": {},
+        
+        # Enhanced Interrupts
+        "interrupt_before": [],
+        "interrupt_after": [],
+        "pending_human_input": None,
+        
         # Debugging & Monitoring
         "state_version": SCHEMA_VERSION,
         "execution_trace": [
@@ -289,6 +375,11 @@ def validate_state(state: AgentState, strict: bool = False) -> bool:
         "short_term_memory", "working_memory", "episodic_memory", "shared_memory", "private_memory",
         "agent_messages", "help_requests", "broadcast_messages", "pending_responses",
         "should_continue", "requires_human_approval", "interrupt_checkpoint", "resume_point", "execution_mode",
+        "thread_id", "checkpoint_id", "checkpoint_ts", "parent_checkpoint_id", "checkpoint_ns", "checkpoint_metadata", "is_resuming",
+        "graph_path", "pending_tasks", "branch_results", "channel_values", "config", "recursion_limit",
+        "stream_mode", "partial_updates", "stream_metadata",
+        "subgraph_states", "parent_graph_id", "subgraph_configs",
+        "interrupt_before", "interrupt_after", "pending_human_input",
         "state_version", "execution_trace", "error_log", "performance_metrics", "debug_flags"
     ]
     
@@ -324,6 +415,19 @@ def validate_state(state: AgentState, strict: bool = False) -> bool:
         ("pending_responses", list, "must be a list"),
         ("should_continue", bool, "must be a boolean"),
         ("requires_human_approval", bool, "must be a boolean"),
+        ("is_resuming", bool, "must be a boolean"),
+        ("checkpoint_metadata", dict, "must be a dictionary"),
+        ("graph_path", list, "must be a list"),
+        ("pending_tasks", list, "must be a list"),
+        ("branch_results", dict, "must be a dictionary"),
+        ("channel_values", dict, "must be a dictionary"),
+        ("recursion_limit", int, "must be an integer"),
+        ("partial_updates", list, "must be a list"),
+        ("stream_metadata", dict, "must be a dictionary"),
+        ("subgraph_states", dict, "must be a dictionary"),
+        ("subgraph_configs", dict, "must be a dictionary"),
+        ("interrupt_before", list, "must be a list"),
+        ("interrupt_after", list, "must be a list"),
         ("execution_trace", list, "must be a list"),
         ("error_log", list, "must be a list"),
         ("performance_metrics", dict, "must be a dictionary"),
@@ -336,7 +440,9 @@ def validate_state(state: AgentState, strict: bool = False) -> bool:
     
     # String field validations
     string_fields = ["current_task", "current_agent", "next_agent", "collaboration_prompt", 
-                    "workflow_pattern", "interrupt_checkpoint", "resume_point", "execution_mode", "state_version"]
+                    "workflow_pattern", "interrupt_checkpoint", "resume_point", "execution_mode", "state_version",
+                    "thread_id", "checkpoint_id", "checkpoint_ts", "parent_checkpoint_id", "checkpoint_ns",
+                    "stream_mode", "parent_graph_id"]
     
     for field in string_fields:
         if field in state and state[field] is not None and not isinstance(state[field], str):
@@ -400,6 +506,33 @@ def validate_state(state: AgentState, strict: bool = False) -> bool:
             for flag, value in state["debug_flags"].items():
                 if not isinstance(value, bool):
                     warnings.append(f"Debug flag '{flag}' should be a boolean")
+        
+        # Validate recursion limit
+        if "recursion_limit" in state:
+            if not isinstance(state["recursion_limit"], int):
+                errors.append("Recursion limit must be an integer")
+            elif state["recursion_limit"] < 1:
+                errors.append("Recursion limit must be at least 1")
+            elif state["recursion_limit"] > 1000:
+                warnings.append(f"Recursion limit {state['recursion_limit']} is very high, consider lowering")
+        
+        # Validate stream mode
+        valid_stream_modes = {"values", "updates", "debug", None}
+        if "stream_mode" in state and state["stream_mode"] not in valid_stream_modes:
+            errors.append(f"Invalid stream_mode '{state['stream_mode']}'. Valid values: {valid_stream_modes}")
+        
+        # Validate graph path contains valid node names
+        if "graph_path" in state and isinstance(state["graph_path"], list):
+            for i, node in enumerate(state["graph_path"]):
+                if not isinstance(node, str):
+                    errors.append(f"Graph path node at position {i} must be a string")
+        
+        # Validate interrupt lists contain valid node names
+        for field in ["interrupt_before", "interrupt_after"]:
+            if field in state and isinstance(state[field], list):
+                for i, node in enumerate(state[field]):
+                    if not isinstance(node, str):
+                        errors.append(f"{field} node at position {i} must be a string")
     
     # Check state version compatibility
     if "state_version" in state and state["state_version"] != SCHEMA_VERSION:

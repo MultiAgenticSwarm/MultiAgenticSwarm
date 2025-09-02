@@ -242,7 +242,7 @@ class TestAgentOutputsReducer:
         assert "agent1" in result
         assert result["agent1"]["current"]["result"] == "test_result"
         assert result["agent1"]["total_outputs"] == 1
-        assert len(result["agent1"]["history"]) == 1
+        assert len(result["agent1"]["history"]) == 0  # First output has empty history
         
     def test_merge_agent_outputs_existing_agent(self):
         """Test merging with existing agent output."""
