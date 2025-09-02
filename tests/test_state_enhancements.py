@@ -451,9 +451,12 @@ class TestEdgeCases:
             # Special handling for LangGraph's add_messages which requires both args to be non-null
             if reducer_func == add_messages:
                 # Test add_messages with proper inputs
+                # Test with two empty lists
                 result1 = reducer_func([], [])
-                result2 = reducer_func([], [])
-                result3 = reducer_func([], [])
+                # Test with one empty and one non-empty list
+                result2 = reducer_func([], [HumanMessage(content="Hello")])
+                # Test with two non-empty lists
+                result3 = reducer_func([AIMessage(content="Hi")], [HumanMessage(content="Hello")])
                 
                 # Should return valid results
                 assert result1 is not None
