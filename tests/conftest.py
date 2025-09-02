@@ -170,7 +170,7 @@ tasks:
 
 
 # Configure pytest-asyncio
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ('pytest_asyncio',)  # Enable async test support
 
 
 @pytest.fixture(scope="session")
