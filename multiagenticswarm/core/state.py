@@ -742,8 +742,8 @@ def compare_versions(version1: str, version2: str) -> int:
     """
     def parse_version(version: str) -> tuple:
         try:
-            # Remove pre-release suffixes for comparison
-            base_version = version.split('-')[0]
+            # Remove pre-release and build metadata suffixes for comparison
+            base_version = re.split(r'[-+]', version)[0]
             parts = [int(x) for x in base_version.split('.')]
             # Ensure we have at least 3 parts (major.minor.patch)
             while len(parts) < 3:
