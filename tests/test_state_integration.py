@@ -334,6 +334,21 @@ def test_state_field_completeness():
         # Control Flow
         "should_continue", "requires_human_approval", "interrupt_checkpoint", "resume_point", "execution_mode",
         
+        # Thread & Checkpoint Management
+        "thread_id", "checkpoint_id", "checkpoint_ts", "parent_checkpoint_id", "checkpoint_ns", "checkpoint_metadata", "is_resuming",
+        
+        # Graph Execution Context
+        "graph_path", "pending_tasks", "branch_results", "channel_values", "config", "recursion_limit",
+        
+        # Streaming Support
+        "stream_mode", "partial_updates", "stream_metadata",
+        
+        # Subgraph Context
+        "subgraph_states", "parent_graph_id", "subgraph_configs",
+        
+        # Enhanced Interrupts
+        "interrupt_before", "interrupt_after", "pending_human_input",
+        
         # Debugging & Monitoring
         "state_version", "execution_trace", "error_log", "performance_metrics", "debug_flags"
     ]

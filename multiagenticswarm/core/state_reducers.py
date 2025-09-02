@@ -15,6 +15,7 @@ import copy
 import uuid
 import inspect
 
+from langgraph.graph.message import add_messages
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -613,6 +614,11 @@ def merge_execution_trace(
 
 # Enhanced reducer registry with metadata
 REDUCERS = {
+    "messages": {
+        "function": add_messages,
+        "description": "LangGraph's built-in message reducer for conversation history",
+        "strategy": ConflictResolutionStrategy.MERGE_UNION
+    },
     "agent_outputs": {
         "function": merge_agent_outputs,
         "description": "Merges agent outputs with history preservation",
