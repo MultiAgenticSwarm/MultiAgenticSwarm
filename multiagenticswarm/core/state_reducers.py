@@ -798,56 +798,245 @@ def merge_states(base_state: Dict[str, Any], state_updates: Dict[str, Any], **kw
 
 def validate_reducer_performance(field_name: str, data_size: int, iterations: int = 100) -> Dict[str, float]:
     """
-    Validate reducer performance with test data.
+    Validate reducer performance with synthetic test data across multiple iterations.
+    
+    This function benchmarks state reducer functions by generating appropriate test data
+    for different field types and measuring merge operation performance. The test data
+    generation strategy is field-specific to ensure realistic performance testing.
+    
+    **Test Data Generation Strategy:**
+    
+    The function generates synthetic test data tailored to each field type's expected 
+    data structure and usage patterns:
+    
+    **Dictionary-Based State Fields** (`agent_outputs`, `tool_results`, `tool_permissions`):
+        - Generates nested dictionary structures: `{item_0: {data: value_0}, ...}`
+        - Simulates agent-specific data with structured nested values
+        - Tests reducer performance with hierarchical data merging
+        - Rationale: These fields store complex agent state and tool execution results
+    
+    **Progress Tracking Fields** (`task_progress`):
+        - Generates dictionary with random float values: `{task_0: 45.67, task_1: 89.23, ...}`
+        - Values range from 0.0 to 100.0 to simulate percentage completion
+        - Tests numeric aggregation and validation logic in progress reducers
+        - Rationale: Progress fields require monotonic increase validation and numeric processing
+    
+    **Communication & Logging Fields** (`agent_messages`, `execution_trace`, `tool_calls`):
+        - Generates list of dictionaries: `[{id: msg_0, data: content_0}, ...]`
+        - Each entry includes unique ID for deduplication testing
+        - Tests list-based merging, ordering, and deduplication logic
+        - Rationale: Communication fields require chronological ordering and duplicate prevention
+    
+    **Default Pattern** (all other fields):
+        - Generates simple key-value dictionary: `{key_0: value_0, key_1: value_1, ...}`
+        - Tests basic dictionary merging with string values
+        - Provides baseline performance measurement for simple reducers
+        - Rationale: Fallback pattern for fields without specialized reducers
+    
+    **Test Execution Strategy:**
+    - Current data uses full `data_size` to simulate existing state
+    - Update data uses `data_size // 2` to simulate typical partial updates
+    - Multiple iterations ensure statistical significance and identify performance variance
+    - High-precision timing using `time.perf_counter()` for accurate measurements
     
     Args:
-        field_name: Name of the field to test
-        data_size: Size of test data
-        iterations: Number of test iterations
+        field_name: Name of the state field to test (must exist in REDUCERS registry)
+        data_size: Number of data items to generate for performance testing
+        iterations: Number of test iterations for statistical accuracy (default: 100)
         
     Returns:
-        Performance metrics dictionary
+        Dict[str, float]: Performance metrics containing:
+            - field: The tested field name
+            - data_size: Size of test data used
+            - iterations: Number of iterations performed
+            - avg_time: Average execution time in seconds
+            - min_time: Fastest execution time in seconds
+            - max_time: Slowest execution time in seconds
+            - total_time: Total cumulative execution time in seconds
+            - error: Error message if testing failed (only if error occurred)
+    
+    Raises:
+        No exceptions are raised directly. Errors are captured and returned in the
+        result dictionary with an 'error' key for graceful degradation.
+    
+    Example:
+        >>> metrics = validate_reducer_performance("agent_outputs", 100, 50)
+        >>> print(f"Average time: {metrics['avg_time']:.6f}s")
+        Average time: 0.000123s
+        
+        >>> # Test with invalid field
+        >>> result = validate_reducer_performance("invalid_field", 10)
+        >>> print(result.get('error'))
+        No reducer found for field
+    
+    Note:
+        This function is primarily used for performance regression testing and 
+        optimization validation. Results may vary based on system load and hardware.
     """
     import time
     import random
     
+    # Input validation following enterprise practices
+    if not isinstance(field_name, str) or not field_name.strip():
+        return {"error": "Field name must be a non-empty string"}
+    
+    if not isinstance(data_size, int) or data_size <= 0:
+        return {"error": "Data size must be a positive integer"}
+    
+    if not isinstance(iterations, int) or iterations <= 0:
+        return {"error": "Iterations must be a positive integer"}
+    
+    # Check if reducer exists for the specified field
     if field_name not in REDUCERS:
-        return {"error": "No reducer found for field"}
+        available_fields = sorted(REDUCERS.keys())
+        return {
+            "error": f"No reducer found for field '{field_name}'. Available fields: {available_fields}"
+        }
     
     reducer_func = REDUCERS[field_name]["function"]
     
-    # Generate test data based on field type
-    def generate_test_data(size: int):
+    def generate_test_data(size: int) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Generate field-appropriate test data based on data structure patterns.
+        
+        This nested function implements the field-specific data generation strategy
+        documented in the main function docstring.
+        """
         if field_name in ["agent_outputs", "tool_results", "tool_permissions"]:
-            return {f"item_{i}": {"data": f"value_{i}"} for i in range(size)}
+            # Dictionary-based state fields: nested structures for agent/tool data
+            # Pattern: {agent_id: {nested_data_structure}}
+            return {
+                f"item_{i}": {
+                    "data": f"value_{i}",
+                    "timestamp": f"2024-01-01T00:00:{i:02d}Z",
+                    "metadata": {"source": f"test_agent_{i % 3}", "priority": i % 5}
+                }
+                for i in range(size)
+            }
+            
         elif field_name in ["task_progress"]:
-            return {f"task_{i}": random.uniform(0, 100) for i in range(size)}
+            # Progress tracking: float values representing completion percentages
+            # Pattern: {task_id: progress_percentage}
+            return {
+                f"task_{i}": round(random.uniform(0.0, 100.0), 2)
+                for i in range(size)
+            }
+            
         elif field_name in ["agent_messages", "execution_trace", "tool_calls"]:
-            return [{"id": f"msg_{i}", "data": f"content_{i}"} for i in range(size)]
+            # Communication and logging fields: list of structured messages
+            # Pattern: [{id: unique_id, data: content, timestamp: time}]
+            return [
+                {
+                    "id": f"msg_{i}",
+                    "data": f"content_{i}",
+                    "timestamp": f"2024-01-01T00:{i:02d}:00Z",
+                    "sender": f"agent_{i % 3}",
+                    "type": ["info", "warning", "error"][i % 3]
+                }
+                for i in range(size)
+            ]
+            
         else:
-            return {f"key_{i}": f"value_{i}" for i in range(size)}
+            # Default pattern: simple key-value dictionary for basic reducers
+            # Pattern: {key: string_value}
+            return {
+                f"key_{i}": f"value_{i}"
+                for i in range(size)
+            }
     
-    current_data = generate_test_data(data_size)
-    update_data = generate_test_data(data_size // 2)
+    logger.debug(f"Starting performance validation for field '{field_name}' with {data_size} items")
     
-    # Perform timing tests
+    try:
+        # Generate test datasets following documented strategy
+        # Current data represents existing state (full size)
+        current_data = generate_test_data(data_size)
+        
+        # Update data represents incoming changes (typically smaller)
+        update_data = generate_test_data(data_size // 2)
+        
+        logger.debug(f"Generated test data: current={len(current_data) if hasattr(current_data, '__len__') else 'N/A'} items, "
+                    f"update={len(update_data) if hasattr(update_data, '__len__') else 'N/A'} items")
+        
+    except Exception as e:
+        logger.error(f"Failed to generate test data for field '{field_name}': {str(e)}")
+        return {"error": f"Test data generation failed: {str(e)}"}
+    
+    # Perform high-precision timing tests across multiple iterations
     times = []
-    for _ in range(iterations):
+    failed_iterations = 0
+    
+    for iteration in range(iterations):
         start_time = time.perf_counter()
         try:
+            # Execute the reducer function with test data
             result = reducer_func(current_data, update_data)
             end_time = time.perf_counter()
+            
+            # Validate that reducer returned a result
+            if result is None:
+                logger.warning(f"Reducer returned None for field '{field_name}' on iteration {iteration}")
+                failed_iterations += 1
+                continue
+                
             times.append(end_time - start_time)
+            
         except Exception as e:
-            logger.warning(f"Performance test failed for {field_name}: {e}")
-            return {"error": str(e)}
+            logger.warning(f"Performance test failed for '{field_name}' on iteration {iteration}: {e}")
+            failed_iterations += 1
+            
+            # If too many iterations fail, abort the test
+            if failed_iterations > iterations * 0.5:  # More than 50% failures
+                return {
+                    "error": f"Too many test failures ({failed_iterations}/{iteration + 1}). Last error: {str(e)}"
+                }
+    
+    # Validate that we have sufficient successful iterations
+    if not times:
+        return {"error": "All test iterations failed"}
+    
+    if failed_iterations > 0:
+        logger.warning(f"Performance test completed with {failed_iterations} failed iterations out of {iterations}")
+    
+    # Calculate comprehensive performance metrics
+    total_successful_iterations = len(times)
+    avg_time = sum(times) / total_successful_iterations
+    min_time = min(times)
+    max_time = max(times)
+    total_time = sum(times)
+    
+    # Log performance summary for debugging
+    logger.debug(f"Performance test completed for '{field_name}': "
+                f"avg={avg_time:.6f}s, min={min_time:.6f}s, max={max_time:.6f}s")
     
     return {
         "field": field_name,
         "data_size": data_size,
-        "iterations": iterations,
-        "avg_time": sum(times) / len(times),
-        "min_time": min(times),
-        "max_time": max(times),
-        "total_time": sum(times)
+        "iterations": total_successful_iterations,
+        "failed_iterations": failed_iterations,
+        "avg_time": avg_time,
+        "min_time": min_time,
+        "max_time": max_time,
+        "total_time": total_time,
+        "reducer_strategy": REDUCERS[field_name].get("strategy", "unknown"),
+        "data_pattern": _get_data_pattern_description(field_name)
     }
+
+
+def _get_data_pattern_description(field_name: str) -> str:
+    """
+    Get a human-readable description of the data pattern used for testing.
+    
+    Args:
+        field_name: Name of the state field
+        
+    Returns:
+        Description of the test data pattern used
+    """
+    if field_name in ["agent_outputs", "tool_results", "tool_permissions"]:
+        return "nested_dictionary_with_metadata"
+    elif field_name in ["task_progress"]:
+        return "percentage_float_values"
+    elif field_name in ["agent_messages", "execution_trace", "tool_calls"]:
+        return "timestamped_message_list"
+    else:
+        return "simple_key_value_dictionary"
