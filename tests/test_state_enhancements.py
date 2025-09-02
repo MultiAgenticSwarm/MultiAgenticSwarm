@@ -46,9 +46,11 @@ from multiagenticswarm.core.state_reducers import (
     apply_reducer,
     get_reducer_info,
     validate_reducer_performance,
-    ConflictResolutionStrategy,
-    ReducerError,
     REDUCERS
+)
+from multiagenticswarm.core.state_utils import (
+    ConflictResolutionStrategy,
+    ReducerError
 )
 
 
