@@ -344,6 +344,18 @@ class StateConfiguration:
             
             # Collaboration Context
             FieldConfig(
+                name="collaboration_prompt",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.COLLABORATION_CONTEXT,
+                required=False,
+                default_value=None,
+                description="Natural language instructions for collaboration",
+                design_rationale="Uses default replace reducer because it represents current state only (no history needed).",
+                conflict_resolution_strategy=ConflictResolutionStrategy.LAST_WRITE_WINS
+            ),
+            
+            FieldConfig(
                 name="coordination_rules",
                 field_type=List[Dict[str, Any]],
                 reducer_type=ReducerType.OPERATOR_ADD,
@@ -354,6 +366,90 @@ class StateConfiguration:
                 design_rationale="Uses operator.add reducer because it accumulates discovered rules and constraints over time. Creates audit trail for debugging and compliance. Enables agents to learn from historical coordination patterns. Supports concurrent additions without data loss.",
                 memory_policy=MemoryPolicy(max_entries=200, archive_after_hours=72),
                 conflict_resolution_strategy=ConflictResolutionStrategy.MERGE_UNION
+            ),
+            
+            # Add other missing fields with minimal configurations for completeness
+            FieldConfig(
+                name="agent_roles",
+                field_type=Dict[str, str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.COLLABORATION_CONTEXT,
+                required=True,
+                default_value={},
+                description="Role assignments per agent"
+            ),
+            
+            FieldConfig(
+                name="workflow_pattern",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.COLLABORATION_CONTEXT,
+                required=False,
+                default_value=None,
+                description="Current collaboration pattern being used"
+            ),
+            
+            FieldConfig(
+                name="decision_points",
+                field_type=List[Dict[str, Any]],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.COLLABORATION_CONTEXT,
+                required=True,
+                default_value=[],
+                description="Conditional branch points in the workflow"
+            ),
+            
+            # Memory Layers
+            FieldConfig(
+                name="short_term_memory",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.MEMORY_LAYERS,
+                required=True,
+                default_value={},
+                description="Current conversation context"
+            ),
+            
+            FieldConfig(
+                name="working_memory",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.MEMORY_LAYERS,
+                required=True,
+                default_value={},
+                description="Active task and working information"
+            ),
+            
+            FieldConfig(
+                name="episodic_memory",
+                field_type=List[Dict[str, Any]],
+                reducer_type=ReducerType.OPERATOR_ADD,
+                group=FieldGroup.MEMORY_LAYERS,
+                required=True,
+                default_value=[],
+                description="Sequence of events and experiences",
+                design_rationale="Uses operator.add reducer because it builds experience history for learning and decision making.",
+                memory_policy=MemoryPolicy(max_entries=1000, archive_after_hours=24)
+            ),
+            
+            FieldConfig(
+                name="shared_memory",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.MEMORY_LAYERS,
+                required=True,
+                default_value={},
+                description="Information visible to all agents"
+            ),
+            
+            FieldConfig(
+                name="private_memory",
+                field_type=Dict[str, Dict[str, Any]],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.MEMORY_LAYERS,
+                required=True,
+                default_value={},
+                description="Agent-specific private information"
             ),
             
             # Communication
@@ -370,7 +466,326 @@ class StateConfiguration:
                 conflict_resolution_strategy=ConflictResolutionStrategy.MERGE_UNION
             ),
             
+            FieldConfig(
+                name="help_requests",
+                field_type=List[Dict[str, Any]],
+                reducer_type=ReducerType.OPERATOR_ADD,
+                group=FieldGroup.COMMUNICATION,
+                required=True,
+                default_value=[],
+                description="Assistance requests between agents"
+            ),
+            
+            FieldConfig(
+                name="broadcast_messages",
+                field_type=List[Dict[str, Any]],
+                reducer_type=ReducerType.OPERATOR_ADD,
+                group=FieldGroup.COMMUNICATION,
+                required=True,
+                default_value=[],
+                description="System-wide announcements"
+            ),
+            
+            FieldConfig(
+                name="pending_responses",
+                field_type=List[Dict[str, Any]],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.COMMUNICATION,
+                required=True,
+                default_value=[],
+                description="Responses awaiting from agents"
+            ),
+            
+            # Control Flow
+            FieldConfig(
+                name="should_continue",
+                field_type=bool,
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.CONTROL_FLOW,
+                required=True,
+                default_value=True,
+                description="Whether to continue with execution"
+            ),
+            
+            FieldConfig(
+                name="requires_human_approval",
+                field_type=bool,
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.CONTROL_FLOW,
+                required=True,
+                default_value=False,
+                description="Pause execution for human input"
+            ),
+            
+            FieldConfig(
+                name="interrupt_checkpoint",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.CONTROL_FLOW,
+                required=False,
+                default_value=None,
+                description="Where to pause execution"
+            ),
+            
+            FieldConfig(
+                name="resume_point",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.CONTROL_FLOW,
+                required=False,
+                default_value=None,
+                description="Where to continue after interrupt"
+            ),
+            
+            FieldConfig(
+                name="execution_mode",
+                field_type=str,
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.CONTROL_FLOW,
+                required=True,
+                default_value="sequential",
+                description="Execution mode: sequential/parallel/supervisor"
+            ),
+            
+            # Add remaining fields with minimal configurations for completeness
+            # Thread & Checkpoint Management
+            FieldConfig(
+                name="thread_id",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=False,
+                default_value=None,
+                description="Unique conversation identifier"
+            ),
+            
+            FieldConfig(
+                name="checkpoint_id",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=False,
+                default_value=None,
+                description="Current checkpoint ID"
+            ),
+            
+            FieldConfig(
+                name="checkpoint_ts",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=False,
+                default_value=None,
+                description="Checkpoint timestamp"
+            ),
+            
+            FieldConfig(
+                name="parent_checkpoint_id",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=False,
+                default_value=None,
+                description="For checkpoint lineage"
+            ),
+            
+            FieldConfig(
+                name="checkpoint_ns",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=False,
+                default_value=None,
+                description="Namespace for isolation"
+            ),
+            
+            FieldConfig(
+                name="checkpoint_metadata",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=True,
+                default_value={},
+                description="Checkpoint-specific metadata"
+            ),
+            
+            FieldConfig(
+                name="is_resuming",
+                field_type=bool,
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.THREAD_CHECKPOINT,
+                required=True,
+                default_value=False,
+                description="Whether resuming from checkpoint"
+            ),
+            
+            # Graph Execution Context
+            FieldConfig(
+                name="graph_path",
+                field_type=List[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.GRAPH_EXECUTION,
+                required=True,
+                default_value=[],
+                description="Current path through the graph"
+            ),
+            
+            FieldConfig(
+                name="pending_tasks",
+                field_type=List[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.GRAPH_EXECUTION,
+                required=True,
+                default_value=[],
+                description="Tasks in other branches"
+            ),
+            
+            FieldConfig(
+                name="branch_results",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.GRAPH_EXECUTION,
+                required=True,
+                default_value={},
+                description="Results from parallel branches"
+            ),
+            
+            FieldConfig(
+                name="channel_values",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.GRAPH_EXECUTION,
+                required=True,
+                default_value={},
+                description="LangGraph channel system"
+            ),
+            
+            FieldConfig(
+                name="config",
+                field_type=Optional[Dict[str, Any]],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.GRAPH_EXECUTION,
+                required=False,
+                default_value=None,
+                description="LangGraph RunnableConfig"
+            ),
+            
+            FieldConfig(
+                name="recursion_limit",
+                field_type=int,
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.GRAPH_EXECUTION,
+                required=True,
+                default_value=25,
+                description="Prevent infinite loops (default: 25)"
+            ),
+            
+            # Streaming Support
+            FieldConfig(
+                name="stream_mode",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.STREAMING,
+                required=False,
+                default_value=None,
+                description="Stream mode: values/updates/debug"
+            ),
+            
+            FieldConfig(
+                name="partial_updates",
+                field_type=List[Dict[str, Any]],
+                reducer_type=ReducerType.OPERATOR_ADD,
+                group=FieldGroup.STREAMING,
+                required=True,
+                default_value=[],
+                description="For streaming partial state",
+                design_rationale="Uses operator.add reducer because streaming updates are critical for debugging and monitoring.",
+                memory_policy=MemoryPolicy(max_entries=500, archive_after_hours=12)
+            ),
+            
+            FieldConfig(
+                name="stream_metadata",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.STREAMING,
+                required=True,
+                default_value={},
+                description="Streaming-specific metadata"
+            ),
+            
+            # Subgraph Context
+            FieldConfig(
+                name="subgraph_states",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.SUBGRAPH,
+                required=True,
+                default_value={},
+                description="States from subgraphs"
+            ),
+            
+            FieldConfig(
+                name="parent_graph_id",
+                field_type=Optional[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.SUBGRAPH,
+                required=False,
+                default_value=None,
+                description="Parent graph if this is a subgraph"
+            ),
+            
+            FieldConfig(
+                name="subgraph_configs",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.SUBGRAPH,
+                required=True,
+                default_value={},
+                description="Subgraph-specific configs"
+            ),
+            
+            # Enhanced Interrupts
+            FieldConfig(
+                name="interrupt_before",
+                field_type=List[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.INTERRUPTS,
+                required=True,
+                default_value=[],
+                description="Nodes to interrupt before"
+            ),
+            
+            FieldConfig(
+                name="interrupt_after",
+                field_type=List[str],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.INTERRUPTS,
+                required=True,
+                default_value=[],
+                description="Nodes to interrupt after"
+            ),
+            
+            FieldConfig(
+                name="pending_human_input",
+                field_type=Optional[Dict[str, Any]],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.INTERRUPTS,
+                required=False,
+                default_value=None,
+                description="Awaiting human input"
+            ),
+            
             # Debugging & Monitoring
+            FieldConfig(
+                name="state_version",
+                field_type=str,
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.DEBUGGING,
+                required=True,
+                default_value="1.1.0",
+                description="Schema version for compatibility checking"
+            ),
+            
             FieldConfig(
                 name="execution_trace",
                 field_type=List[Dict[str, Any]],
@@ -395,6 +810,26 @@ class StateConfiguration:
                 design_rationale="Uses operator.add reducer because error logs are critical for debugging and monitoring. Creates audit trail for debugging and compliance. Critical for system reliability and troubleshooting. Supports concurrent additions without data loss. Max 500 entries, older entries archived to persistent storage. Cleanup: Entries older than 48 hours moved to archive.",
                 memory_policy=MemoryPolicy(max_entries=500, archive_after_hours=48, archive_location="persistent_storage"),
                 conflict_resolution_strategy=ConflictResolutionStrategy.MERGE_UNION
+            ),
+            
+            FieldConfig(
+                name="performance_metrics",
+                field_type=Dict[str, Any],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.DEBUGGING,
+                required=True,
+                default_value={},
+                description="Timing and resource usage metrics"
+            ),
+            
+            FieldConfig(
+                name="debug_flags",
+                field_type=Dict[str, bool],
+                reducer_type=ReducerType.DEFAULT_REPLACE,
+                group=FieldGroup.DEBUGGING,
+                required=True,
+                default_value={},
+                description="Flags to enable detailed logging"
             ),
         ]
         
@@ -444,9 +879,24 @@ class StateConfiguration:
         
         errors = []
         
-        # Type validation
-        if not isinstance(value, config.field_type):
-            errors.append(f"Field '{field_name}' must be of type {config.field_type.__name__}")
+        # Type validation - handle generic types properly
+        try:
+            # For complex generic types, we'll do basic checks
+            if hasattr(config.field_type, "__origin__"):
+                # This is a generic type like List[Something] or Dict[K, V]
+                origin_type = config.field_type.__origin__
+                if not isinstance(value, origin_type):
+                    errors.append(f"Field '{field_name}' must be of type {origin_type.__name__}")
+            else:
+                # Simple type check
+                if not isinstance(value, config.field_type):
+                    errors.append(f"Field '{field_name}' must be of type {config.field_type.__name__}")
+        except (TypeError, AttributeError):
+            # Fallback for complex types - just check basic structure
+            if config.field_type.__name__.startswith("List") and not isinstance(value, list):
+                errors.append(f"Field '{field_name}' must be a list")
+            elif config.field_type.__name__.startswith("Dict") and not isinstance(value, dict):
+                errors.append(f"Field '{field_name}' must be a dictionary")
         
         # Custom validation rules
         for rule in config.validation_rules:
@@ -503,12 +953,8 @@ def create_dynamic_agent_state_class():
     """Create AgentState class dynamically based on configuration."""
     annotations = state_config.get_field_type_annotations()
     
-    # Create the class dynamically
-    AgentStateDynamic = type(
-        'AgentStateDynamic',
-        (TypedDict,),
-        {'__annotations__': annotations}
-    )
+    # Create a simple TypedDict directly
+    AgentStateDynamic = TypedDict('AgentStateDynamic', annotations)
     
     return AgentStateDynamic
 

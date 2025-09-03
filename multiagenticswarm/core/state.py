@@ -24,7 +24,7 @@ from ..utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Current schema version for compatibility checking
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 # Valid agent status values
 VALID_AGENT_STATUSES = {
@@ -1090,12 +1090,13 @@ def migrate_0_9_to_1_0(state: Dict[str, Any]) -> Dict[str, Any]:
     return migrated
 
 
-def auto_migrate_state(state: Dict[str, Any]) -> Dict[str, Any]:
+def auto_migrate_state(state: Dict[str, Any], use_dynamic_config: bool = False) -> Dict[str, Any]:
     """
     Automatically migrate state to the current schema version.
     
     Args:
         state: State to migrate
+        use_dynamic_config: Whether to use dynamic configuration for migration
         
     Returns:
         Migrated state
@@ -1106,14 +1107,89 @@ def auto_migrate_state(state: Dict[str, Any]) -> Dict[str, Any]:
     current_version = state.get("state_version", "0.0.0")
     
     if current_version == SCHEMA_VERSION:
+        # Apply memory policies if using dynamic config
+        if use_dynamic_config:
+            from .state_config import get_state_config
+            config = get_state_config()
+            state = config.apply_memory_policies(state)
         return state
     
     # Create backup before migration
     backup = create_migration_backup(state)
     
     try:
-        return migrate_state(state, SCHEMA_VERSION)
+        migrated_state = migrate_state(state, SCHEMA_VERSION)
+        
+        # Apply dynamic configuration if requested
+        if use_dynamic_config:
+            from .state_config import get_state_config
+            config = get_state_config()
+            
+            # Ensure all required fields are present
+            for field_name, field_config in config.get_active_fields().items():
+                if field_config.required and field_name not in migrated_state:
+                    migrated_state[field_name] = field_config.default_value
+                    logger.info(f"Added missing field '{field_name}' with default value during migration")
+            
+            # Apply memory policies
+            migrated_state = config.apply_memory_policies(migrated_state)
+            
+        return migrated_state
+        
     except StateVersionError as e:
         logger.error(f"Auto-migration failed: {e}")
         logger.info("State left unchanged due to migration failure")
         raise  # Raise the exception to alert users of incompatibility
+
+
+@register_migration("1.0.0", "1.1.0")
+def migrate_1_0_to_1_1(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Migration from version 1.0.0 to 1.1.0 - adds dynamic configuration support.
+    
+    This migration adds support for the new dynamic configuration system while
+    maintaining backwards compatibility with existing state data.
+    """
+    migrated = dict(state)
+    
+    # Ensure all new fields with reducers have proper structure
+    list_fields_with_reducers = [
+        "subtasks", "tool_calls", "tool_errors", "coordination_rules", 
+        "episodic_memory", "agent_messages", "help_requests", 
+        "broadcast_messages", "execution_trace", "error_log", "partial_updates"
+    ]
+    
+    for field_name in list_fields_with_reducers:
+        if field_name in migrated and not isinstance(migrated[field_name], list):
+            logger.warning(f"Converting field '{field_name}' to list format for reducer compatibility")
+            migrated[field_name] = []
+    
+    # Add memory management metadata to fields that need it
+    timestamp = datetime.now().isoformat()
+    
+    # Add timestamps to execution trace if missing
+    if "execution_trace" in migrated and isinstance(migrated["execution_trace"], list):
+        for entry in migrated["execution_trace"]:
+            if isinstance(entry, dict) and "timestamp" not in entry:
+                entry["timestamp"] = timestamp
+    
+    # Add timestamps to error log if missing
+    if "error_log" in migrated and isinstance(migrated["error_log"], list):
+        for entry in migrated["error_log"]:
+            if isinstance(entry, dict) and "timestamp" not in entry:
+                entry["timestamp"] = timestamp
+    
+    # Ensure proper structure for agent_outputs (backwards compatibility)
+    if "agent_outputs" in migrated and isinstance(migrated["agent_outputs"], dict):
+        for agent_id, output in migrated["agent_outputs"].items():
+            if not isinstance(output, dict) or "current" not in output:
+                # Convert old format to new structured format
+                migrated["agent_outputs"][agent_id] = {
+                    "current": output,
+                    "history": [],
+                    "last_updated": timestamp,
+                    "total_outputs": 1
+                }
+    
+    logger.debug("Applied migration 1.0.0 -> 1.1.0 (dynamic configuration support)")
+    return migrated
