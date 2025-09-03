@@ -185,9 +185,11 @@ def merge_agent_outputs(current: Optional[Dict[str, Any]], update: Optional[Dict
                     "timestamp": existing["last_updated"],
                     "version": existing["total_outputs"]
                 })
+                
+                # Update with new output
+                existing["current"] = output
             
-            # Update with new output
-            existing["current"] = output
+            # Always update metadata even if output is the same
             existing["last_updated"] = timestamp
             existing["total_outputs"] = existing["total_outputs"] + 1
             

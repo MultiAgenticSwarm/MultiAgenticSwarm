@@ -269,7 +269,8 @@ class TestAgentOutputsReducer:
             "agent1": {
                 "current": {"result": "same_result"},
                 "history": [],
-                "total_outputs": 1
+                "total_outputs": 1,
+                "last_updated": "2024-01-01T00:00:00Z"
             }
         }
         update = {"agent1": {"result": "same_result"}}

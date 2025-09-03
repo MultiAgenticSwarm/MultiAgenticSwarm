@@ -10,6 +10,7 @@ for all data flowing through the multi-agent system. The state is designed to be
 """
 
 from typing import Any, Dict, List, Optional, TypedDict, Union, Callable
+import operator
 from typing_extensions import Annotated
 from datetime import datetime
 import re
@@ -57,14 +58,22 @@ class AgentState(TypedDict):
     """
     
     # ========== Message Management ==========
-    # Message history with automatic merging via LangGraph's add_messages reducer
+    # Uses add_messages reducer because:
+    # - Messages must be appended chronologically, never replaced
+    # - Multiple agents may add messages concurrently  
+    # - LangGraph's add_messages handles deduplication and ordering
+    # - Critical for maintaining conversation context
     messages: Annotated[List[BaseMessage], add_messages]
     
     # ========== Task Management ==========
     # Active task being worked on
     current_task: Optional[str]
-    # Breakdown of main task into subtasks
-    subtasks: List[Dict[str, Any]]
+    # Uses operator.add reducer because:
+    # - Agents progressively break down tasks into subtasks
+    # - Creates audit trail for debugging and compliance
+    # - Enables agents to learn from historical task breakdown patterns
+    # - Supports concurrent additions without data loss
+    subtasks: Annotated[List[Dict[str, Any]], operator.add]
     # Progress percentage (0-100) per subtask
     task_progress: Dict[str, float]
     # Additional task context and metadata
@@ -83,22 +92,34 @@ class AgentState(TypedDict):
     agent_status: Dict[str, str]
     
     # ========== Tool Execution ==========
-    # History of all tool requests made
-    tool_calls: List[Dict[str, Any]]
+    # Uses operator.add reducer because:
+    # - Maintains complete tool execution history for debugging
+    # - Creates audit trail for compliance and troubleshooting
+    # - Enables agents to learn from historical tool usage patterns
+    # - Supports concurrent additions without data loss
+    tool_calls: Annotated[List[Dict[str, Any]], operator.add]
     # Results from tool executions
     tool_results: Dict[str, Any]
     # Dynamic permission matrix: agent_id -> [tool_names]
     tool_permissions: Dict[str, List[str]]
     # Queue of pending tool requests
     pending_tools: List[Dict[str, Any]]
-    # Failed tool executions with error details
-    tool_errors: List[Dict[str, Any]]
+    # Uses operator.add reducer because:
+    # - Keep error history for debugging and compliance
+    # - Enables agents to learn from historical error patterns
+    # - Supports concurrent additions without data loss
+    # - Critical for system reliability and monitoring
+    tool_errors: Annotated[List[Dict[str, Any]], operator.add]
     
     # ========== Collaboration Context ==========
     # Natural language instructions for collaboration
     collaboration_prompt: Optional[str]
-    # Extracted rules and constraints from prompt
-    coordination_rules: List[Dict[str, Any]]
+    # Uses operator.add reducer because:
+    # - Accumulate discovered rules and constraints over time
+    # - Creates audit trail for debugging and compliance
+    # - Enables agents to learn from historical coordination patterns
+    # - Supports concurrent additions without data loss
+    coordination_rules: Annotated[List[Dict[str, Any]], operator.add]
     # Role assignments per agent
     agent_roles: Dict[str, str]
     # Current collaboration pattern being used
@@ -107,37 +128,89 @@ class AgentState(TypedDict):
     decision_points: List[Dict[str, Any]]
     
     # ========== Memory Layers ==========
-    # Current conversation context
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit for current conversation context
+    # - Reduces memory usage for frequently updated fields
     short_term_memory: Dict[str, Any]
-    # Active task and working information
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Active task and working information that changes frequently
+    # - Historical values provide no benefit for current working context
+    # - Reduces memory usage for frequently updated fields
     working_memory: Dict[str, Any]
-    # Sequence of events and experiences
-    episodic_memory: List[Dict[str, Any]]
-    # Information visible to all agents
+    # Uses operator.add reducer because:
+    # - Build experience history for learning and decision making
+    # - Creates audit trail for debugging and compliance
+    # - Enables agents to learn from historical event patterns
+    # - Supports concurrent additions without data loss
+    episodic_memory: Annotated[List[Dict[str, Any]], operator.add]
+    # Uses default replace reducer because:
+    # - Information visible to all agents (shared state)
+    # - Single value that changes atomically
+    # - Historical values stored in episodic_memory
+    # - Reduces memory usage for frequently updated fields
     shared_memory: Dict[str, Any]
-    # Agent-specific private information
+    # Uses default replace reducer because:
+    # - Agent-specific private information (current state)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit for private context
+    # - Reduces memory usage for frequently updated fields
     private_memory: Dict[str, Dict[str, Any]]
     
     # ========== Inter-Agent Communication ==========
-    # Direct messages between agents
-    agent_messages: List[Dict[str, Any]]
-    # Assistance requests between agents
-    help_requests: List[Dict[str, Any]]
-    # System-wide announcements
-    broadcast_messages: List[Dict[str, Any]]
+    # Uses operator.add reducer because:
+    # - Communication logs must preserve chronological order
+    # - Creates audit trail for debugging and compliance
+    # - Enables agents to learn from historical communication patterns
+    # - Supports concurrent additions without data loss
+    agent_messages: Annotated[List[Dict[str, Any]], operator.add]
+    # Uses operator.add reducer because:
+    # - Help request logs for learning and debugging
+    # - Creates audit trail for debugging and compliance
+    # - Enables agents to learn from historical help patterns
+    # - Supports concurrent additions without data loss
+    help_requests: Annotated[List[Dict[str, Any]], operator.add]
+    # Uses operator.add reducer because:
+    # - System-wide announcement logs for debugging
+    # - Creates audit trail for debugging and compliance
+    # - Enables system monitoring and historical analysis
+    # - Supports concurrent additions without data loss
+    broadcast_messages: Annotated[List[Dict[str, Any]], operator.add]
     # Responses awaiting from agents
     pending_responses: List[Dict[str, Any]]
     
     # ========== Control Flow ==========
-    # Whether to continue with execution
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     should_continue: bool
-    # Pause execution for human input
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     requires_human_approval: bool
-    # Where to pause execution
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     interrupt_checkpoint: Optional[str]
-    # Where to continue after interrupt
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     resume_point: Optional[str]
-    # Execution mode: sequential/parallel/supervisor
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     execution_mode: str
     
     # ========== Thread & Checkpoint Management ==========
@@ -175,10 +248,23 @@ class AgentState(TypedDict):
     #   'values'  - Stream the current values of the agent state as they change.
     #   'updates' - Stream incremental updates to the agent state (diffs/patches).
     #   'debug'   - Stream detailed debug information for troubleshooting and analysis.
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     stream_mode: Optional[str]
-    # For streaming partial state
-    partial_updates: List[Dict[str, Any]]
-    # Streaming-specific metadata
+    # Uses operator.add reducer because:
+    # - Streaming updates for debugging and monitoring
+    # - Creates audit trail for debugging and compliance
+    # - Enables system monitoring and historical analysis
+    # - Supports concurrent additions without data loss
+    partial_updates: Annotated[List[Dict[str, Any]], operator.add]
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     stream_metadata: Dict[str, Any]
 
     # ========== Subgraph Context ==========
@@ -198,21 +284,46 @@ class AgentState(TypedDict):
     pending_human_input: Optional[Dict[str, Any]]
 
     # ========== Debugging & Monitoring ==========
-    # Schema version for compatibility checking
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     state_version: str
-    # Step-by-step execution log
-    execution_trace: List[Dict[str, Any]]
-    # Error messages and stack traces
-    error_log: List[Dict[str, Any]]
-    # Timing and resource usage metrics
+    # Uses operator.add reducer because:
+    # - Step-by-step execution log for debugging
+    # - Creates audit trail for debugging and compliance
+    # - Enables system monitoring and historical analysis
+    # - Supports concurrent additions without data loss
+    # Max 1000 entries, older entries archived to persistent storage
+    # Cleanup: Entries older than 24 hours moved to archive
+    execution_trace: Annotated[List[Dict[str, Any]], operator.add]
+    # Uses operator.add reducer because:
+    # - Error logs for debugging and monitoring
+    # - Creates audit trail for debugging and compliance
+    # - Critical for system reliability and troubleshooting
+    # - Supports concurrent additions without data loss
+    # Max 500 entries, older entries archived to persistent storage
+    # Cleanup: Entries older than 48 hours moved to archive
+    error_log: Annotated[List[Dict[str, Any]], operator.add]
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values stored in execution_trace
+    # - Reduces memory usage for frequently updated fields
     performance_metrics: Dict[str, Any]
-    # Flags to enable detailed logging
+    # Uses default replace reducer because:
+    # - Represents current state only (no history needed)
+    # - Single value that changes atomically
+    # - Historical values provide no benefit
+    # - Reduces memory usage for frequently updated fields
     debug_flags: Dict[str, bool]
 
 
 def create_initial_state(
     collaboration_prompt: Optional[str] = None,
     initial_message: Optional[str] = None,
+    use_dynamic_config: bool = False,
     **kwargs: Any
 ) -> AgentState:
     """
@@ -221,6 +332,7 @@ def create_initial_state(
     Args:
         collaboration_prompt: Initial collaboration instructions
         initial_message: Initial message to add to conversation
+        use_dynamic_config: Whether to use dynamic field configuration
         **kwargs: Additional fields to override defaults
         
     Returns:
@@ -228,113 +340,127 @@ def create_initial_state(
     """
     current_time = datetime.now().isoformat()
     
-    # Create base state with defaults
-    state: AgentState = {
-        # Message Management
-        "messages": [],
+    if use_dynamic_config:
+        # Use dynamic configuration to create state
+        from .state_config import get_state_config
+        config = get_state_config()
         
-        # Task Management
-        "current_task": None,
-        "subtasks": [],
-        "task_progress": {},
-        "task_metadata": {},
-        
-        # Agent Coordination
-        "current_agent": None,
-        "next_agent": None,
-        "agent_outputs": {},
-        "agent_queue": [],
-        "agent_status": {},
-        
-        # Tool Execution
-        "tool_calls": [],
-        "tool_results": {},
-        "tool_permissions": {},
-        "pending_tools": [],
-        "tool_errors": [],
-        
-        # Collaboration Context
-        "collaboration_prompt": collaboration_prompt,
-        "coordination_rules": [],
-        "agent_roles": {},
-        "workflow_pattern": None,
-        "decision_points": [],
-        
-        # Memory Layers
-        "short_term_memory": {},
-        "working_memory": {},
-        "episodic_memory": [],
-        "shared_memory": {},
-        "private_memory": {},
-        
-        # Inter-Agent Communication
-        "agent_messages": [],
-        "help_requests": [],
-        "broadcast_messages": [],
-        "pending_responses": [],
-        
-        # Control Flow
-        "should_continue": True,
-        "requires_human_approval": False,
-        "interrupt_checkpoint": None,
-        "resume_point": None,
-        "execution_mode": "sequential",
-        
-        # Thread & Checkpoint Management
-        "thread_id": None,
-        "checkpoint_id": None,
-        "checkpoint_ts": None,
-        "parent_checkpoint_id": None,
-        "checkpoint_ns": None,
-        "checkpoint_metadata": {},
-        "is_resuming": False,
-        
-        # Graph Execution Context
-        "graph_path": [],
-        "pending_tasks": [],
-        "branch_results": {},
-        "channel_values": {},
-        "config": None,
-        "recursion_limit": 25,
-        
-        # Streaming Support
-        "stream_mode": None,
-        "partial_updates": [],
-        "stream_metadata": {},
-        
-        # Subgraph Context
-        "subgraph_states": {},
-        "parent_graph_id": None,
-        "subgraph_configs": {},
-        
-        # Enhanced Interrupts
-        "interrupt_before": [],
-        "interrupt_after": [],
-        "pending_human_input": None,
-        
-        # Debugging & Monitoring
-        "state_version": SCHEMA_VERSION,
-        "execution_trace": [
-            {
-                "event": "state_initialized",
-                "timestamp": current_time,
-                "details": "Initial state created"
+        state = {}
+        for field_name, field_config in config.get_active_fields().items():
+            state[field_name] = field_config.default_value
+            
+        # Override collaboration_prompt if provided
+        if collaboration_prompt and "collaboration_prompt" in state:
+            state["collaboration_prompt"] = collaboration_prompt
+            
+    else:
+        # Use static configuration (existing behavior)
+        state: AgentState = {
+            # Message Management
+            "messages": [],
+            
+            # Task Management
+            "current_task": None,
+            "subtasks": [],
+            "task_progress": {},
+            "task_metadata": {},
+            
+            # Agent Coordination
+            "current_agent": None,
+            "next_agent": None,
+            "agent_outputs": {},
+            "agent_queue": [],
+            "agent_status": {},
+            
+            # Tool Execution
+            "tool_calls": [],
+            "tool_results": {},
+            "tool_permissions": {},
+            "pending_tools": [],
+            "tool_errors": [],
+            
+            # Collaboration Context
+            "collaboration_prompt": collaboration_prompt,
+            "coordination_rules": [],
+            "agent_roles": {},
+            "workflow_pattern": None,
+            "decision_points": [],
+            
+            # Memory Layers
+            "short_term_memory": {},
+            "working_memory": {},
+            "episodic_memory": [],
+            "shared_memory": {},
+            "private_memory": {},
+            
+            # Inter-Agent Communication
+            "agent_messages": [],
+            "help_requests": [],
+            "broadcast_messages": [],
+            "pending_responses": [],
+            
+            # Control Flow
+            "should_continue": True,
+            "requires_human_approval": False,
+            "interrupt_checkpoint": None,
+            "resume_point": None,
+            "execution_mode": "sequential",
+            
+            # Thread & Checkpoint Management
+            "thread_id": None,
+            "checkpoint_id": None,
+            "checkpoint_ts": None,
+            "parent_checkpoint_id": None,
+            "checkpoint_ns": None,
+            "checkpoint_metadata": {},
+            "is_resuming": False,
+            
+            # Graph Execution Context
+            "graph_path": [],
+            "pending_tasks": [],
+            "branch_results": {},
+            "channel_values": {},
+            "config": None,
+            "recursion_limit": 25,
+            
+            # Streaming Support
+            "stream_mode": None,
+            "partial_updates": [],
+            "stream_metadata": {},
+            
+            # Subgraph Context
+            "subgraph_states": {},
+            "parent_graph_id": None,
+            "subgraph_configs": {},
+            
+            # Enhanced Interrupts
+            "interrupt_before": [],
+            "interrupt_after": [],
+            "pending_human_input": None,
+            
+            # Debugging & Monitoring
+            "state_version": SCHEMA_VERSION,
+            "execution_trace": [
+                {
+                    "event": "state_initialized",
+                    "timestamp": current_time,
+                    "details": "Initial state created"
+                }
+            ],
+            "error_log": [],
+            "performance_metrics": {
+                "created_at": current_time,
+                "total_tool_calls": 0,
+                "total_messages": 0,
+                "total_agents_used": 0
+            },
+            "debug_flags": {
+                "trace_execution": False,
+                "log_state_changes": False,
+                "validate_permissions": True,
+                "record_performance": True
             }
-        ],
-        "error_log": [],
-        "performance_metrics": {
-            "created_at": current_time,
-            "total_tool_calls": 0,
-            "total_messages": 0,
-            "total_agents_used": 0
-        },
-        "debug_flags": {
-            "trace_execution": False,
-            "log_state_changes": False,
-            "validate_permissions": True,
-            "record_performance": True
         }
-    }
     
     # Add initial message if provided
     if initial_message:
@@ -353,13 +479,14 @@ def create_initial_state(
     return state
 
 
-def validate_state(state: AgentState, strict: bool = False) -> bool:
+def validate_state(state: AgentState, strict: bool = False, use_dynamic_config: bool = False) -> bool:
     """
     Validate that a state object conforms to the AgentState schema.
     
     Args:
         state: The state object to validate
         strict: If True, perform more thorough validation including value checks
+        use_dynamic_config: Whether to use dynamic configuration for validation
         
     Returns:
         True if valid, False otherwise
@@ -370,77 +497,94 @@ def validate_state(state: AgentState, strict: bool = False) -> bool:
     errors = []
     warnings = []
     
-    # Check required fields exist
-    required_fields = [
-        "messages", "current_task", "subtasks", "task_progress", "task_metadata",
-        "current_agent", "next_agent", "agent_outputs", "agent_queue", "agent_status",
-        "tool_calls", "tool_results", "tool_permissions", "pending_tools", "tool_errors",
-        "collaboration_prompt", "coordination_rules", "agent_roles", "workflow_pattern", "decision_points",
-        "short_term_memory", "working_memory", "episodic_memory", "shared_memory", "private_memory",
-        "agent_messages", "help_requests", "broadcast_messages", "pending_responses",
-        "should_continue", "requires_human_approval", "interrupt_checkpoint", "resume_point", "execution_mode",
-        "thread_id", "checkpoint_id", "checkpoint_ts", "parent_checkpoint_id", "checkpoint_ns", "checkpoint_metadata", "is_resuming",
-        "graph_path", "pending_tasks", "branch_results", "channel_values", "config", "recursion_limit",
-        "stream_mode", "partial_updates", "stream_metadata",
-        "subgraph_states", "parent_graph_id", "subgraph_configs",
-        "interrupt_before", "interrupt_after", "pending_human_input",
-        "state_version", "execution_trace", "error_log", "performance_metrics", "debug_flags"
-    ]
+    if use_dynamic_config:
+        # Use dynamic configuration for validation
+        from .state_config import get_state_config
+        config = get_state_config()
+        
+        # Check required fields exist
+        for field_name, field_config in config.get_active_fields().items():
+            if field_config.required and field_name not in state:
+                errors.append(f"Missing required field: {field_name}")
+            
+            # Validate field values if present
+            if field_name in state:
+                field_errors = config.validate_field_value(field_name, state[field_name])
+                errors.extend(field_errors)
     
-    for field in required_fields:
-        if field not in state:
-            errors.append(f"Missing required field: {field}")
-    
-    # Basic type validations
-    type_checks = [
-        ("messages", list, "must be a list"),
-        ("subtasks", list, "must be a list"),
-        ("task_progress", dict, "must be a dictionary"),
-        ("task_metadata", dict, "must be a dictionary"),
-        ("agent_outputs", dict, "must be a dictionary"),
-        ("agent_queue", list, "must be a list"),
-        ("agent_status", dict, "must be a dictionary"),
-        ("tool_calls", list, "must be a list"),
-        ("tool_results", dict, "must be a dictionary"),
-        ("tool_permissions", dict, "must be a dictionary"),
-        ("pending_tools", list, "must be a list"),
-        ("tool_errors", list, "must be a list"),
-        ("coordination_rules", list, "must be a list"),
-        ("agent_roles", dict, "must be a dictionary"),
-        ("decision_points", list, "must be a list"),
-        ("short_term_memory", dict, "must be a dictionary"),
-        ("working_memory", dict, "must be a dictionary"),
-        ("episodic_memory", list, "must be a list"),
-        ("shared_memory", dict, "must be a dictionary"),
-        ("private_memory", dict, "must be a dictionary"),
-        ("agent_messages", list, "must be a list"),
-        ("help_requests", list, "must be a list"),
-        ("broadcast_messages", list, "must be a list"),
-        ("pending_responses", list, "must be a list"),
-        ("should_continue", bool, "must be a boolean"),
-        ("requires_human_approval", bool, "must be a boolean"),
-        ("is_resuming", bool, "must be a boolean"),
-        ("checkpoint_metadata", dict, "must be a dictionary"),
-        ("graph_path", list, "must be a list"),
-        ("pending_tasks", list, "must be a list"),
-        ("branch_results", dict, "must be a dictionary"),
-        ("channel_values", dict, "must be a dictionary"),
-        ("recursion_limit", int, "must be an integer"),
-        ("partial_updates", list, "must be a list"),
-        ("stream_metadata", dict, "must be a dictionary"),
-        ("subgraph_states", dict, "must be a dictionary"),
-        ("subgraph_configs", dict, "must be a dictionary"),
-        ("interrupt_before", list, "must be a list"),
-        ("interrupt_after", list, "must be a list"),
-        ("execution_trace", list, "must be a list"),
-        ("error_log", list, "must be a list"),
-        ("performance_metrics", dict, "must be a dictionary"),
-        ("debug_flags", dict, "must be a dictionary"),
-    ]
-    
-    for field, expected_type, error_msg in type_checks:
-        if field in state and not isinstance(state[field], expected_type):
-            errors.append(f"Field '{field}' {error_msg}")
+    else:
+        # Use static validation (existing behavior)
+        # Check required fields exist
+        required_fields = [
+            "messages", "current_task", "subtasks", "task_progress", "task_metadata",
+            "current_agent", "next_agent", "agent_outputs", "agent_queue", "agent_status",
+            "tool_calls", "tool_results", "tool_permissions", "pending_tools", "tool_errors",
+            "collaboration_prompt", "coordination_rules", "agent_roles", "workflow_pattern", "decision_points",
+            "short_term_memory", "working_memory", "episodic_memory", "shared_memory", "private_memory",
+            "agent_messages", "help_requests", "broadcast_messages", "pending_responses",
+            "should_continue", "requires_human_approval", "interrupt_checkpoint", "resume_point", "execution_mode",
+            "thread_id", "checkpoint_id", "checkpoint_ts", "parent_checkpoint_id", "checkpoint_ns", "checkpoint_metadata", "is_resuming",
+            "graph_path", "pending_tasks", "branch_results", "channel_values", "config", "recursion_limit",
+            "stream_mode", "partial_updates", "stream_metadata",
+            "subgraph_states", "parent_graph_id", "subgraph_configs",
+            "interrupt_before", "interrupt_after", "pending_human_input",
+            "state_version", "execution_trace", "error_log", "performance_metrics", "debug_flags"
+        ]
+        
+        for field in required_fields:
+            if field not in state:
+                errors.append(f"Missing required field: {field}")
+        
+        # Basic type validations
+        type_checks = [
+            ("messages", list, "must be a list"),
+            ("subtasks", list, "must be a list"),
+            ("task_progress", dict, "must be a dictionary"),
+            ("task_metadata", dict, "must be a dictionary"),
+            ("agent_outputs", dict, "must be a dictionary"),
+            ("agent_queue", list, "must be a list"),
+            ("agent_status", dict, "must be a dictionary"),
+            ("tool_calls", list, "must be a list"),
+            ("tool_results", dict, "must be a dictionary"),
+            ("tool_permissions", dict, "must be a dictionary"),
+            ("pending_tools", list, "must be a list"),
+            ("tool_errors", list, "must be a list"),
+            ("coordination_rules", list, "must be a list"),
+            ("agent_roles", dict, "must be a dictionary"),
+            ("decision_points", list, "must be a list"),
+            ("short_term_memory", dict, "must be a dictionary"),
+            ("working_memory", dict, "must be a dictionary"),
+            ("episodic_memory", list, "must be a list"),
+            ("shared_memory", dict, "must be a dictionary"),
+            ("private_memory", dict, "must be a dictionary"),
+            ("agent_messages", list, "must be a list"),
+            ("help_requests", list, "must be a list"),
+            ("broadcast_messages", list, "must be a list"),
+            ("pending_responses", list, "must be a list"),
+            ("should_continue", bool, "must be a boolean"),
+            ("requires_human_approval", bool, "must be a boolean"),
+            ("is_resuming", bool, "must be a boolean"),
+            ("checkpoint_metadata", dict, "must be a dictionary"),
+            ("graph_path", list, "must be a list"),
+            ("pending_tasks", list, "must be a list"),
+            ("branch_results", dict, "must be a dictionary"),
+            ("channel_values", dict, "must be a dictionary"),
+            ("recursion_limit", int, "must be an integer"),
+            ("partial_updates", list, "must be a list"),
+            ("stream_metadata", dict, "must be a dictionary"),
+            ("subgraph_states", dict, "must be a dictionary"),
+            ("subgraph_configs", dict, "must be a dictionary"),
+            ("interrupt_before", list, "must be a list"),
+            ("interrupt_after", list, "must be a list"),
+            ("execution_trace", list, "must be a list"),
+            ("error_log", list, "must be a list"),
+            ("performance_metrics", dict, "must be a dictionary"),
+            ("debug_flags", dict, "must be a dictionary"),
+        ]
+        
+        for field, expected_type, error_msg in type_checks:
+            if field in state and not isinstance(state[field], expected_type):
+                errors.append(f"Field '{field}' {error_msg}")
     
     # String field validations
     string_fields = ["current_task", "current_agent", "next_agent", "collaboration_prompt", 
