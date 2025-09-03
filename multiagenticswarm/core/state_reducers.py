@@ -9,17 +9,33 @@ Reducers ensure consistent and predictable state merging behavior while
 preserving important historical information and resolving conflicts intelligently.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TypedDict
 from collections.abc import Callable
 from datetime import datetime, timezone
 import copy
 import uuid
 import inspect
+import functools
 
 from langgraph.graph.message import add_messages
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class HistoryEntry(TypedDict):
+    """Structure for agent output history entries."""
+    output: Any
+    timestamp: str
+    version: int
+
+
+class AgentOutput(TypedDict):
+    """Structure for agent outputs with history preservation."""
+    current: Any
+    history: List[HistoryEntry]
+    last_updated: str
+    total_outputs: int
 
 
 class ReducerError(Exception):
@@ -50,6 +66,7 @@ def safe_reducer(reducer_func: Callable) -> Callable:
     Returns:
         Wrapped reducer function with error handling
     """
+    @functools.wraps(reducer_func)
     def wrapped_reducer(*args, **kwargs):
         func_name = reducer_func.__name__
         try:
@@ -73,7 +90,7 @@ def safe_reducer(reducer_func: Callable) -> Callable:
 
 
 @safe_reducer
-def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+def merge_agent_outputs(current: Optional[Dict[str, AgentOutput]], update: Optional[Dict[str, Any]]) -> Dict[str, AgentOutput]:
     """
     Merge agent outputs, preserving historical outputs and resolving conflicts.
     
@@ -82,11 +99,11 @@ def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
     is easily accessible.
     
     Args:
-        current: Current agent_outputs state
-        update: New agent_outputs to merge
+        current: Current agent_outputs state with structured output format
+        update: New agent_outputs to merge (raw outputs from agents)
         
     Returns:
-        Merged agent_outputs with historical preservation
+        Merged agent_outputs with historical preservation and structured format
         
     Raises:
         ReducerError: If merge operation fails

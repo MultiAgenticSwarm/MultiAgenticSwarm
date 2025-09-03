@@ -46,9 +46,7 @@ from multiagenticswarm.core.state_reducers import (
     apply_reducer,
     get_reducer_info,
     validate_reducer_performance,
-    REDUCERS
-)
-from multiagenticswarm.core.state_utils import (
+    REDUCERS,
     ConflictResolutionStrategy,
     ReducerError
 )
@@ -161,9 +159,10 @@ class TestStateMigration:
     
     def test_version_comparison_with_prereleases(self):
         """Test version comparison with pre-release versions."""
-        # Note: Current implementation strips pre-release suffixes for comparison
-        assert compare_versions("1.0.0-alpha", "1.0.0") == 0  # Same base version
-        assert compare_versions("1.0.0", "1.0.0-beta") == 0   # Same base version
+        # Note: Using packaging.version for robust pre-release handling
+        assert compare_versions("1.0.0-alpha", "1.0.0") == -1  # Pre-release < final version
+        assert compare_versions("1.0.0", "1.0.0-beta") == 1   # Final version > pre-release
+        assert compare_versions("1.0.0-alpha", "1.0.0-beta") == -1  # alpha < beta
     
     def test_version_comparison_invalid_format(self):
         """Test version comparison with invalid formats."""

@@ -14,6 +14,7 @@ from typing_extensions import Annotated
 from datetime import datetime
 import re
 
+from packaging.version import Version
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langgraph.graph.message import add_messages
 
@@ -729,11 +730,15 @@ class StateVersionError(Exception):
 
 def compare_versions(version1: str, version2: str) -> int:
     """
-    Compare two semantic version strings.
+    Compare two semantic version strings using the packaging library.
+    
+    This implementation uses the well-established packaging.version library
+    that handles edge cases, pre-releases, and build metadata more robustly
+    than custom implementations.
     
     Args:
-        version1: First version string (e.g., "1.0.0")
-        version2: Second version string (e.g., "1.1.0")
+        version1: First version string (e.g., "1.0.0", "2.0.0-alpha.1")
+        version2: Second version string (e.g., "1.1.0", "2.0.0-beta.2")
         
     Returns:
         -1 if version1 < version2
@@ -743,27 +748,18 @@ def compare_versions(version1: str, version2: str) -> int:
     Raises:
         StateVersionError: If version format is invalid
     """
-    def parse_version(version: str) -> tuple:
-        try:
-            # Remove pre-release and build metadata suffixes for comparison
-            base_version = re.split(r'[-+]', version)[0]
-            parts = [int(x) for x in base_version.split('.')]
-            # Ensure we have at least 3 parts (major.minor.patch)
-            while len(parts) < 3:
-                parts.append(0)
-            return tuple(parts[:3])
-        except (ValueError, AttributeError):
-            raise StateVersionError(f"Invalid version format: {version}")
-    
-    v1 = parse_version(version1)
-    v2 = parse_version(version2)
-    
-    if v1 < v2:
-        return -1
-    elif v1 > v2:
-        return 1
-    else:
-        return 0
+    try:
+        v1 = Version(version1)
+        v2 = Version(version2)
+        
+        if v1 < v2:
+            return -1
+        elif v1 > v2:
+            return 1
+        else:
+            return 0
+    except Exception as e:
+        raise StateVersionError(f"Invalid version format: {e}") from e
 
 
 def is_compatible_version(state_version: str, required_version: str) -> bool:
