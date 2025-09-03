@@ -269,6 +269,7 @@ class TestAgentOutputsReducer:
             "agent1": {
                 "current": {"result": "same_result"},
                 "history": [],
+                "last_updated": "2023-01-01T00:00:00Z",  # Add missing field
                 "total_outputs": 1
             }
         }

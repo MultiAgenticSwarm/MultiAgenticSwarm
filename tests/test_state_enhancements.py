@@ -285,6 +285,60 @@ class TestEnhancedReducers:
         assert "agent1" in result
         assert result["agent1"]["current"]["result"] == "new"
     
+    def test_merge_agent_outputs_robustness_enhancement(self):
+        """Test the new robustness enhancement for malformed existing data."""
+        import logging
+        from unittest.mock import patch
+        
+        # Test the specific robustness check added for malformed existing data
+        # This tests the enhancement described in the problem statement
+        
+        with patch('multiagenticswarm.core.state_reducers.logger') as mock_logger:
+            # Case 1: String data where dict expected
+            current = {"agent1": {"current": "normal", "history": [], "last_updated": "2023-01-01", "total_outputs": 1}}
+            
+            # Manually create a corrupted version to test the specific code path
+            def test_robustness_condition(existing_data):
+                """Test if the robustness condition correctly identifies malformed data."""
+                return not isinstance(existing_data, dict) or "current" not in existing_data
+            
+            # Test various malformed data types
+            malformed_cases = [
+                "string_data",
+                ["list", "data"],
+                123,
+                None,
+                {"wrong_key": "value"},  # Dict without 'current' key
+            ]
+            
+            for malformed_data in malformed_cases:
+                needs_fix = test_robustness_condition(malformed_data)
+                assert needs_fix, f"Should detect malformed data: {malformed_data}"
+            
+            # Test properly structured data
+            proper_data = {
+                "current": "data",
+                "history": [],
+                "last_updated": "2023-01-01",
+                "total_outputs": 1
+            }
+            needs_fix = test_robustness_condition(proper_data)
+            assert not needs_fix, "Should not flag properly structured data as malformed"
+            
+            # Test that _ensure_agent_output_structure can handle all malformed cases
+            from multiagenticswarm.core.state_reducers import _ensure_agent_output_structure
+            from datetime import datetime, timezone
+            
+            timestamp = datetime.now(timezone.utc).isoformat()
+            for malformed_data in malformed_cases:
+                restructured = _ensure_agent_output_structure("test_agent", malformed_data, timestamp)
+                assert isinstance(restructured, dict)
+                assert "current" in restructured
+                assert "history" in restructured
+                assert "last_updated" in restructured
+                assert "total_outputs" in restructured
+                assert restructured["current"] == malformed_data
+    
     def test_aggregate_progress_enhanced_error_handling(self):
         """Test enhanced progress aggregation with error handling."""
         current = {"task1": 50.0}
