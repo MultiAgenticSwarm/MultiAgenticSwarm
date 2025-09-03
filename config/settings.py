@@ -106,9 +106,9 @@ Output:
     "QA": "Quality validation"
   }}
 }}
-should not include the text or anything that violates the json format.
-Keep it ensure that you are strickly following the default functional schema as it is base schema for prompt parser .
-keep the names as in default function scheme like phases, rules, dependencies, roles and notes.
+You should not include any text or anything that violates the JSON format.
+Ensure that you are strictly following the default function schema, as it is the base schema for the prompt parser.
+Keep the names as in the default function schema, like phases, rules, dependencies, roles, and notes.
 Return ONLY valid JSON.
 
 """
