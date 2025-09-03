@@ -168,12 +168,15 @@ class TestReducerIntegration:
         current = [{"task": "task1", "status": "completed"}]
         update = [{"task": "task2", "status": "in_progress"}]
         
-        # The reducer registry doesn't include subtasks yet, so it will use default (last write wins)
+        # The reducer registry includes subtasks, so it will use append (operator.add) behavior
         result = apply_reducer("subtasks", current, update)
         
-        # Since subtasks isn't in the registry, it uses last-write-wins behavior
-        # The test should expect the update value to replace the current value
-        assert result == [{"task": "task2", "status": "in_progress"}]
+        # Since subtasks uses append behavior, the result should be the concatenation of current and update
+        # The test should expect both tasks in the result
+        assert result == [
+            {"task": "task1", "status": "completed"},
+            {"task": "task2", "status": "in_progress"}
+        ]
     
     def test_tool_calls_reducer(self):
         """Test that tool_calls field uses operator.add correctly."""
