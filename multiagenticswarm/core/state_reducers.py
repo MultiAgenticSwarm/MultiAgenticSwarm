@@ -9,17 +9,33 @@ Reducers ensure consistent and predictable state merging behavior while
 preserving important historical information and resolving conflicts intelligently.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TypedDict
 from collections.abc import Callable
 from datetime import datetime, timezone
 import copy
 import uuid
 import inspect
+import functools
 
 from langgraph.graph.message import add_messages
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class HistoryEntry(TypedDict):
+    """Structure for agent output history entries."""
+    output: Any
+    timestamp: str
+    version: int
+
+
+class AgentOutput(TypedDict):
+    """Structure for agent outputs with history preservation."""
+    current: Any
+    history: List[HistoryEntry]
+    last_updated: str
+    total_outputs: int
 
 
 class ReducerError(Exception):
@@ -50,6 +66,7 @@ def safe_reducer(reducer_func: Callable) -> Callable:
     Returns:
         Wrapped reducer function with error handling
     """
+    @functools.wraps(reducer_func)
     def wrapped_reducer(*args, **kwargs):
         func_name = reducer_func.__name__
         try:
@@ -72,8 +89,34 @@ def safe_reducer(reducer_func: Callable) -> Callable:
     return wrapped_reducer
 
 
+def _ensure_agent_output_structure(agent_id: str, data: Any, timestamp: str) -> AgentOutput:
+    """
+    Convert unstructured agent output data to structured AgentOutput format.
+    
+    Args:
+        agent_id: ID of the agent
+        data: Raw agent output data (any format)
+        timestamp: Current timestamp for the conversion
+        
+    Returns:
+        Properly structured AgentOutput
+    """
+    if isinstance(data, dict) and all(key in data for key in ["current", "history", "last_updated", "total_outputs"]):
+        # Already in structured format
+        return data  # type: ignore
+    else:
+        # Convert from unstructured format
+        logger.debug(f"Converting unstructured agent output to structured format for agent {agent_id}")
+        return {
+            "current": data,
+            "history": [],
+            "last_updated": timestamp,
+            "total_outputs": 1
+        }
+
+
 @safe_reducer
-def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+def merge_agent_outputs(current: Optional[Dict[str, Any]], update: Optional[Dict[str, Any]]) -> Dict[str, AgentOutput]:
     """
     Merge agent outputs, preserving historical outputs and resolving conflicts.
     
@@ -81,12 +124,16 @@ def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
     history of all outputs while ensuring the most recent output for each agent
     is easily accessible.
     
+    The function maintains backward compatibility by accepting both structured
+    (AgentOutput format) and unstructured (raw output) current data, while
+    always returning the enhanced structured format.
+    
     Args:
-        current: Current agent_outputs state
-        update: New agent_outputs to merge
+        current: Current agent_outputs state (supports both old and new formats)
+        update: New agent_outputs to merge (raw outputs from agents)
         
     Returns:
-        Merged agent_outputs with historical preservation
+        Merged agent_outputs with historical preservation and structured format
         
     Raises:
         ReducerError: If merge operation fails
@@ -94,15 +141,25 @@ def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
     if current is None and update is None:
         return {}
     
-    merged = copy.deepcopy(current) if current else {}
+    timestamp = datetime.now(timezone.utc).isoformat()
+    
+    # Convert current data to structured format
+    merged: Dict[str, AgentOutput] = {}
+    if current:
+        if not isinstance(current, dict):
+            raise ReducerError(f"Current must be a dictionary, got {type(current).__name__}")
+        
+        for agent_id, data in current.items():
+            if not isinstance(agent_id, str):
+                logger.warning(f"Agent ID should be string, got {type(agent_id).__name__}: {agent_id}")
+                agent_id = str(agent_id)
+            merged[agent_id] = _ensure_agent_output_structure(agent_id, data, timestamp)
     
     if not update:
         return merged
     
     if not isinstance(update, dict):
         raise ReducerError(f"Update must be a dictionary, got {type(update).__name__}")
-    
-    timestamp = datetime.now(timezone.utc).isoformat()
     
     for agent_id, output in update.items():
         if not isinstance(agent_id, str):
@@ -118,36 +175,25 @@ def merge_agent_outputs(current: Dict[str, Any], update: Dict[str, Any]) -> Dict
                 "total_outputs": 1
             }
         else:
-            # Update existing agent output
+            # Update existing agent output (already in structured format)
             existing = merged[agent_id]
             
-            # Ensure existing has proper structure
-            if not isinstance(existing, dict):
-                logger.warning(f"Converting invalid agent output structure for {agent_id}")
-                existing = {"current": existing, "history": [], "total_outputs": 1}
-                merged[agent_id] = existing
-            
-            # Move current to history and set new current
-            if "current" in existing:
-                # Add current to history if it's different from new output
-                if existing["current"] != output:
-                    if "history" not in existing:
-                        existing["history"] = []
-                    
-                    existing["history"].append({
-                        "output": existing["current"],
-                        "timestamp": existing.get("last_updated", timestamp),
-                        "version": existing.get("total_outputs", 0)
-                    })
+            # Move current to history if it's different from new output
+            if existing["current"] != output:
+                existing["history"].append({
+                    "output": existing["current"],
+                    "timestamp": existing["last_updated"],
+                    "version": existing["total_outputs"]
+                })
             
             # Update with new output
             existing["current"] = output
             existing["last_updated"] = timestamp
-            existing["total_outputs"] = existing.get("total_outputs", 0) + 1
+            existing["total_outputs"] = existing["total_outputs"] + 1
             
             # Limit history size to prevent memory bloat
             max_history = 50
-            if len(existing.get("history", [])) > max_history:
+            if len(existing["history"]) > max_history:
                 existing["history"] = existing["history"][-max_history:]
                 logger.debug(f"Trimmed history for agent {agent_id} to {max_history} entries")
     
