@@ -74,7 +74,7 @@ Structure:
   "notes": "Optional notes about assumptions or missing info"
 }}
 
-Example(this is how i want you to gave me output json and also see the object names carefully):
+Example (this is how I want you to give me output JSON and also see the object names carefully):
 Input: "UI and Backend agents work in parallel, then QA agent reviews both outputs. If issues found, relevant agent fixes them"
 Output:
 {{
