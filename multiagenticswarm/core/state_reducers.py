@@ -778,6 +778,7 @@ def apply_reducer(field_name: str, current: Any, update: Any, **kwargs) -> Any:
     Raises:
         ReducerError: If reducer application fails
     """
+    # First check the static REDUCERS registry for backwards compatibility
     if field_name in REDUCERS:
         reducer_info = REDUCERS[field_name]
         reducer_func = reducer_info["function"]
@@ -792,10 +793,36 @@ def apply_reducer(field_name: str, current: Any, update: Any, **kwargs) -> Any:
         except Exception as e:
             logger.error(f"Failed to apply reducer for field '{field_name}': {str(e)}")
             raise ReducerError(f"Reducer application failed for field '{field_name}': {str(e)}") from e
-    else:
-        # Default behavior: last write wins (including None values)
-        logger.debug(f"No custom reducer for field '{field_name}', using last-write-wins")
-        return update
+    
+    # Try to get reducer from dynamic configuration
+    try:
+        from .state_config import get_state_config
+        config = get_state_config()
+        field_config = config.get_field_config(field_name)
+        
+        if field_config:
+            reducer_func = field_config.get_reducer_function()
+            if reducer_func:
+                # For operator.add, handle list concatenation
+                if reducer_func.__name__ == 'add' and isinstance(current, list) and isinstance(update, list):
+                    return current + update
+                # For other reducers, call them directly
+                try:
+                    sig = inspect.signature(reducer_func)
+                    if len(sig.parameters) > 2:  # More than just current and update
+                        return reducer_func(current, update, **kwargs)
+                    else:
+                        return reducer_func(current, update)
+                except Exception as e:
+                    logger.error(f"Failed to apply dynamic reducer for field '{field_name}': {str(e)}")
+                    raise ReducerError(f"Dynamic reducer application failed for field '{field_name}': {str(e)}") from e
+    
+    except Exception as e:
+        logger.debug(f"Could not get dynamic config for field '{field_name}': {str(e)}")
+    
+    # Default behavior: last write wins (including None values)
+    logger.debug(f"No custom reducer for field '{field_name}', using last-write-wins")
+    return update
 
 
 @safe_reducer

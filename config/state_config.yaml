@@ -1,0 +1,779 @@
+# State Configuration for MultiAgenticSwarm
+# This file defines the complete state schema with field configurations,
+# reducers, memory policies, and feature flags.
+
+# Feature flags to enable/disable field groups
+feature_flags:
+  enable_message_management: true
+  enable_task_management: true
+  enable_agent_coordination: true
+  enable_tool_execution: true
+  enable_collaboration_context: true
+  enable_memory_layers: true
+  enable_communication: true
+  enable_control_flow: true
+  enable_thread_checkpoint: true
+  enable_graph_execution: true
+  enable_streaming: true
+  enable_subgraph: true
+  enable_interrupts: true
+  enable_debugging: true
+
+# Field groups configuration
+field_groups:
+  message_management:
+    description: "Message and conversation management"
+    enabled: true
+  
+  task_management:
+    description: "Task breakdown and progress tracking"
+    enabled: true
+  
+  agent_coordination:
+    description: "Agent orchestration and coordination"
+    enabled: true
+  
+  tool_execution:
+    description: "Tool calls and execution management"
+    enabled: true
+  
+  collaboration_context:
+    description: "Multi-agent collaboration context"
+    enabled: true
+  
+  memory_layers:
+    description: "Multi-layer memory management"
+    enabled: true
+  
+  communication:
+    description: "Inter-agent communication"
+    enabled: true
+  
+  control_flow:
+    description: "Execution control and flow management"
+    enabled: true
+  
+  thread_checkpoint:
+    description: "Thread and checkpoint management"
+    enabled: true
+  
+  graph_execution:
+    description: "Graph execution context"
+    enabled: true
+  
+  streaming:
+    description: "Streaming and real-time updates"
+    enabled: true
+  
+  subgraph:
+    description: "Subgraph execution context"
+    enabled: true
+  
+  interrupts:
+    description: "Enhanced interrupt handling"
+    enabled: true
+  
+  debugging:
+    description: "Debugging and monitoring"
+    enabled: true
+
+# Field configurations
+fields:
+  # ========== Message Management ==========
+  messages:
+    field_type: "List[BaseMessage]"
+    reducer_type: "add_messages"
+    group: "message_management"
+    required: true
+    default_value: []
+    description: "Conversation history using LangGraph's add_messages reducer"
+    design_rationale: "Uses add_messages reducer because messages must be appended chronologically, never replaced. Multiple agents may add messages concurrently. LangGraph's add_messages handles deduplication and ordering. Critical for maintaining conversation context."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 1000
+      archive_after_hours: 24
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  # ========== Task Management ==========
+  current_task:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "task_management"
+    required: false
+    default_value: null
+    description: "Active task description"
+    design_rationale: "Uses default replace reducer because it represents current state only (no history needed). Single value that changes atomically. Historical values provide no benefit. Reduces memory usage for frequently updated fields."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  subtasks:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "task_management"
+    required: true
+    default_value: []
+    description: "Breakdown of main task into subtasks"
+    design_rationale: "Uses operator.add reducer because agents progressively break down tasks. Creates audit trail for debugging and compliance. Enables agents to learn from historical patterns. Supports concurrent additions without data loss."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 500
+      archive_after_hours: 48
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  task_progress:
+    field_type: "Dict[str, float]"
+    reducer_type: "aggregate_progress"
+    group: "task_management"
+    required: true
+    default_value: {}
+    description: "Progress percentage (0-100) per subtask"
+    design_rationale: "Uses aggregate_progress reducer to ensure monotonic progress and handle concurrent updates intelligently."
+    validation_rules: ["progress_range_0_100", "monotonic_increase"]
+    conflict_resolution_strategy: "MONOTONIC_INCREASE"
+
+  task_metadata:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "task_management"
+    required: true
+    default_value: {}
+    description: "Additional task context and metadata"
+    design_rationale: "Uses default replace reducer because it represents current metadata state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Agent Coordination ==========
+  current_agent:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "agent_coordination"
+    required: false
+    default_value: null
+    description: "Currently executing agent identifier"
+    design_rationale: "Uses default replace reducer because it represents current state only (no history needed). Single value that changes atomically."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  next_agent:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "agent_coordination"
+    required: false
+    default_value: null
+    description: "Next agent to execute in the workflow"
+    design_rationale: "Uses default replace reducer because it represents current state only (no history needed). Single value that changes atomically."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  agent_outputs:
+    field_type: "Dict[str, Any]"
+    reducer_type: "merge_agent_outputs"
+    group: "agent_coordination"
+    required: true
+    default_value: {}
+    description: "Results and outputs from each agent"
+    design_rationale: "Uses merge_agent_outputs reducer to preserve historical outputs and resolve conflicts based on timestamp."
+    conflict_resolution_strategy: "TIMESTAMP_BASED"
+    memory_policy:
+      max_entries: 100
+      archive_after_hours: 24
+      cleanup_strategy: "timestamp_based"
+      archive_location: null
+      enable_compression: false
+
+  agent_queue:
+    field_type: "List[str]"
+    reducer_type: "default_replace"
+    group: "agent_coordination"
+    required: true
+    default_value: []
+    description: "Queue of pending agent executions"
+    design_rationale: "Uses default replace reducer because it represents current queue state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  agent_status:
+    field_type: "Dict[str, str]"
+    reducer_type: "default_replace"
+    group: "agent_coordination"
+    required: true
+    default_value: {}
+    description: "Health and availability status per agent"
+    design_rationale: "Uses default replace reducer because it represents current status only."
+    validation_rules: ["valid_agent_status"]
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Tool Execution ==========
+  tool_calls:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "tool_execution"
+    required: true
+    default_value: []
+    description: "History of all tool requests made"
+    design_rationale: "Uses operator.add reducer because it maintains complete tool execution history for debugging. Creates audit trail for compliance and troubleshooting. Enables agents to learn from historical tool usage patterns. Supports concurrent additions without data loss."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 1000
+      archive_after_hours: 24
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  tool_results:
+    field_type: "Dict[str, Any]"
+    reducer_type: "merge_tool_results"
+    group: "tool_execution"
+    required: true
+    default_value: {}
+    description: "Results from tool executions"
+    design_rationale: "Uses merge_tool_results reducer to preserve history and handle duplicates intelligently."
+    conflict_resolution_strategy: "KEEP_BOTH"
+    memory_policy:
+      max_entries: 500
+      archive_after_hours: 48
+      cleanup_strategy: "timestamp_based"
+      archive_location: null
+      enable_compression: false
+
+  tool_permissions:
+    field_type: "Dict[str, List[str]]"
+    reducer_type: "resolve_permissions"
+    group: "tool_execution"
+    required: true
+    default_value: {}
+    description: "Dynamic permission matrix: agent_id -> [tool_names]"
+    design_rationale: "Uses resolve_permissions reducer with security-first approach (most restrictive wins)."
+    validation_rules: ["valid_tool_permissions"]
+    conflict_resolution_strategy: "MOST_RESTRICTIVE"
+
+  pending_tools:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "default_replace"
+    group: "tool_execution"
+    required: true
+    default_value: []
+    description: "Queue of pending tool requests"
+    design_rationale: "Uses default replace reducer because it represents current queue state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  tool_errors:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "tool_execution"
+    required: true
+    default_value: []
+    description: "Failed tool executions with error details"
+    design_rationale: "Uses operator.add reducer because it keeps error history for debugging and compliance. Enables agents to learn from historical error patterns. Supports concurrent additions without data loss. Critical for system reliability and monitoring."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 500
+      archive_after_hours: 48
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  # ========== Collaboration Context ==========
+  collaboration_prompt:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "collaboration_context"
+    required: false
+    default_value: null
+    description: "Natural language instructions for collaboration"
+    design_rationale: "Uses default replace reducer because it represents current state only (no history needed)."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  coordination_rules:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "collaboration_context"
+    required: true
+    default_value: []
+    description: "Extracted rules and constraints from prompt"
+    design_rationale: "Uses operator.add reducer because it accumulates discovered rules and constraints over time. Creates audit trail for debugging and compliance. Enables agents to learn from historical coordination patterns. Supports concurrent additions without data loss."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 200
+      archive_after_hours: 72
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  agent_roles:
+    field_type: "Dict[str, str]"
+    reducer_type: "default_replace"
+    group: "collaboration_context"
+    required: true
+    default_value: {}
+    description: "Role assignments per agent"
+    design_rationale: "Uses default replace reducer because it represents current role assignments."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  workflow_pattern:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "collaboration_context"
+    required: false
+    default_value: null
+    description: "Current collaboration pattern being used"
+    design_rationale: "Uses default replace reducer because it represents current pattern only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  decision_points:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "default_replace"
+    group: "collaboration_context"
+    required: true
+    default_value: []
+    description: "Conditional branch points in the workflow"
+    design_rationale: "Uses default replace reducer because it represents current decision points."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Memory Layers ==========
+  short_term_memory:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "memory_layers"
+    required: true
+    default_value: {}
+    description: "Current conversation context"
+    design_rationale: "Uses default replace reducer because it represents current state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  working_memory:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "memory_layers"
+    required: true
+    default_value: {}
+    description: "Active task and working information"
+    design_rationale: "Uses default replace reducer because it represents current working context."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  episodic_memory:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "memory_layers"
+    required: true
+    default_value: []
+    description: "Sequence of events and experiences"
+    design_rationale: "Uses operator.add reducer because it builds experience history for learning and decision making."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 1000
+      archive_after_hours: 24
+      cleanup_strategy: "timestamp_based"
+      archive_location: null
+      enable_compression: false
+
+  shared_memory:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "memory_layers"
+    required: true
+    default_value: {}
+    description: "Information visible to all agents"
+    design_rationale: "Uses default replace reducer because it represents shared current state."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  private_memory:
+    field_type: "Dict[str, Dict[str, Any]]"
+    reducer_type: "default_replace"
+    group: "memory_layers"
+    required: true
+    default_value: {}
+    description: "Agent-specific private information"
+    design_rationale: "Uses default replace reducer because it represents current private state."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Communication ==========
+  agent_messages:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "communication"
+    required: true
+    default_value: []
+    description: "Direct messages between agents"
+    design_rationale: "Uses operator.add reducer because communication logs must preserve chronological order. Creates audit trail for debugging and compliance. Enables agents to learn from historical communication patterns. Supports concurrent additions without data loss."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 1000
+      archive_after_hours: 24
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  help_requests:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "communication"
+    required: true
+    default_value: []
+    description: "Assistance requests between agents"
+    design_rationale: "Uses operator.add reducer for chronological help request tracking."
+    conflict_resolution_strategy: "MERGE_UNION"
+
+  broadcast_messages:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "communication"
+    required: true
+    default_value: []
+    description: "System-wide announcements"
+    design_rationale: "Uses operator.add reducer for chronological broadcast tracking."
+    conflict_resolution_strategy: "MERGE_UNION"
+
+  pending_responses:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "default_replace"
+    group: "communication"
+    required: true
+    default_value: []
+    description: "Responses awaiting from agents"
+    design_rationale: "Uses default replace reducer because it represents current pending state."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Control Flow ==========
+  should_continue:
+    field_type: "bool"
+    reducer_type: "default_replace"
+    group: "control_flow"
+    required: true
+    default_value: true
+    description: "Whether to continue with execution"
+    design_rationale: "Uses default replace reducer because it represents current state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  requires_human_approval:
+    field_type: "bool"
+    reducer_type: "default_replace"
+    group: "control_flow"
+    required: true
+    default_value: false
+    description: "Pause execution for human input"
+    design_rationale: "Uses default replace reducer because it represents current state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  interrupt_checkpoint:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "control_flow"
+    required: false
+    default_value: null
+    description: "Where to pause execution"
+    design_rationale: "Uses default replace reducer because it represents current state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  resume_point:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "control_flow"
+    required: false
+    default_value: null
+    description: "Where to continue after interrupt"
+    design_rationale: "Uses default replace reducer because it represents current state only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  execution_mode:
+    field_type: "str"
+    reducer_type: "default_replace"
+    group: "control_flow"
+    required: true
+    default_value: "sequential"
+    description: "Execution mode: sequential/parallel/supervisor"
+    design_rationale: "Uses default replace reducer because it represents current mode only."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Thread & Checkpoint Management ==========
+  thread_id:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: false
+    default_value: null
+    description: "Unique conversation identifier"
+    design_rationale: "Uses default replace reducer because it represents current thread ID."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  checkpoint_id:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: false
+    default_value: null
+    description: "Current checkpoint ID"
+    design_rationale: "Uses default replace reducer because it represents current checkpoint."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  checkpoint_ts:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: false
+    default_value: null
+    description: "Checkpoint timestamp"
+    design_rationale: "Uses default replace reducer because it represents current timestamp."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  parent_checkpoint_id:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: false
+    default_value: null
+    description: "For checkpoint lineage"
+    design_rationale: "Uses default replace reducer because it represents current parent."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  checkpoint_ns:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: false
+    default_value: null
+    description: "Namespace for isolation"
+    design_rationale: "Uses default replace reducer because it represents current namespace."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  checkpoint_metadata:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: true
+    default_value: {}
+    description: "Checkpoint-specific metadata"
+    design_rationale: "Uses default replace reducer because it represents current metadata."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  is_resuming:
+    field_type: "bool"
+    reducer_type: "default_replace"
+    group: "thread_checkpoint"
+    required: true
+    default_value: false
+    description: "Whether resuming from checkpoint"
+    design_rationale: "Uses default replace reducer because it represents current state."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Graph Execution Context ==========
+  graph_path:
+    field_type: "List[str]"
+    reducer_type: "default_replace"
+    group: "graph_execution"
+    required: true
+    default_value: []
+    description: "Current path through the graph"
+    design_rationale: "Uses default replace reducer because it represents current path."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  pending_tasks:
+    field_type: "List[str]"
+    reducer_type: "default_replace"
+    group: "graph_execution"
+    required: true
+    default_value: []
+    description: "Tasks in other branches"
+    design_rationale: "Uses default replace reducer because it represents current pending tasks."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  branch_results:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "graph_execution"
+    required: true
+    default_value: {}
+    description: "Results from parallel branches"
+    design_rationale: "Uses default replace reducer because it represents current branch results."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  channel_values:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "graph_execution"
+    required: true
+    default_value: {}
+    description: "LangGraph channel system"
+    design_rationale: "Uses default replace reducer because it represents current channel values."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  config:
+    field_type: "Optional[Dict[str, Any]]"
+    reducer_type: "default_replace"
+    group: "graph_execution"
+    required: false
+    default_value: null
+    description: "LangGraph RunnableConfig"
+    design_rationale: "Uses default replace reducer because it represents current config."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  recursion_limit:
+    field_type: "int"
+    reducer_type: "default_replace"
+    group: "graph_execution"
+    required: true
+    default_value: 25
+    description: "Prevent infinite loops (default: 25)"
+    design_rationale: "Uses default replace reducer because it represents current limit."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Streaming Support ==========
+  stream_mode:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "streaming"
+    required: false
+    default_value: null
+    description: "Stream mode: values/updates/debug"
+    design_rationale: "Uses default replace reducer because it represents current stream mode."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  partial_updates:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "streaming"
+    required: true
+    default_value: []
+    description: "For streaming partial state"
+    design_rationale: "Uses operator.add reducer because streaming updates are critical for debugging and monitoring."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 500
+      archive_after_hours: 12
+      cleanup_strategy: "fifo"
+      archive_location: null
+      enable_compression: false
+
+  stream_metadata:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "streaming"
+    required: true
+    default_value: {}
+    description: "Streaming-specific metadata"
+    design_rationale: "Uses default replace reducer because it represents current metadata."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Subgraph Context ==========
+  subgraph_states:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "subgraph"
+    required: true
+    default_value: {}
+    description: "States from subgraphs"
+    design_rationale: "Uses default replace reducer because it represents current subgraph states."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  parent_graph_id:
+    field_type: "Optional[str]"
+    reducer_type: "default_replace"
+    group: "subgraph"
+    required: false
+    default_value: null
+    description: "Parent graph if this is a subgraph"
+    design_rationale: "Uses default replace reducer because it represents current parent."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  subgraph_configs:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "subgraph"
+    required: true
+    default_value: {}
+    description: "Subgraph-specific configs"
+    design_rationale: "Uses default replace reducer because it represents current configs."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Enhanced Interrupts ==========
+  interrupt_before:
+    field_type: "List[str]"
+    reducer_type: "default_replace"
+    group: "interrupts"
+    required: true
+    default_value: []
+    description: "Nodes to interrupt before"
+    design_rationale: "Uses default replace reducer because it represents current interrupt list."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  interrupt_after:
+    field_type: "List[str]"
+    reducer_type: "default_replace"
+    group: "interrupts"
+    required: true
+    default_value: []
+    description: "Nodes to interrupt after"
+    design_rationale: "Uses default replace reducer because it represents current interrupt list."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  pending_human_input:
+    field_type: "Optional[Dict[str, Any]]"
+    reducer_type: "default_replace"
+    group: "interrupts"
+    required: false
+    default_value: null
+    description: "Awaiting human input"
+    design_rationale: "Uses default replace reducer because it represents current pending input."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  # ========== Debugging & Monitoring ==========
+  state_version:
+    field_type: "str"
+    reducer_type: "default_replace"
+    group: "debugging"
+    required: true
+    default_value: "1.1.0"
+    description: "Schema version for compatibility checking"
+    design_rationale: "Uses default replace reducer because it represents current version."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  execution_trace:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "debugging"
+    required: true
+    default_value: []
+    description: "Step-by-step execution log"
+    design_rationale: "Uses operator.add reducer because it provides step-by-step execution log for debugging. Creates audit trail for debugging and compliance. Enables system monitoring and historical analysis. Supports concurrent additions without data loss. Max 1000 entries, older entries archived to persistent storage. Cleanup: Entries older than 24 hours moved to archive."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 1000
+      archive_after_hours: 24
+      cleanup_strategy: "fifo"
+      archive_location: "persistent_storage"
+      enable_compression: false
+
+  error_log:
+    field_type: "List[Dict[str, Any]]"
+    reducer_type: "operator_add"
+    group: "debugging"
+    required: true
+    default_value: []
+    description: "Error messages and stack traces"
+    design_rationale: "Uses operator.add reducer because error logs are critical for debugging and monitoring. Creates audit trail for debugging and compliance. Critical for system reliability and troubleshooting. Supports concurrent additions without data loss. Max 500 entries, older entries archived to persistent storage. Cleanup: Entries older than 48 hours moved to archive."
+    conflict_resolution_strategy: "MERGE_UNION"
+    memory_policy:
+      max_entries: 500
+      archive_after_hours: 48
+      cleanup_strategy: "fifo"
+      archive_location: "persistent_storage"
+      enable_compression: false
+
+  performance_metrics:
+    field_type: "Dict[str, Any]"
+    reducer_type: "default_replace"
+    group: "debugging"
+    required: true
+    default_value: {}
+    description: "Timing and resource usage metrics"
+    design_rationale: "Uses default replace reducer because it represents current metrics."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
+
+  debug_flags:
+    field_type: "Dict[str, bool]"
+    reducer_type: "default_replace"
+    group: "debugging"
+    required: true
+    default_value: {}
+    description: "Flags to enable detailed logging"
+    design_rationale: "Uses default replace reducer because it represents current flags."
+    conflict_resolution_strategy: "LAST_WRITE_WINS"
