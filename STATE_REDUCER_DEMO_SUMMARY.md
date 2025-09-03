@@ -57,8 +57,6 @@ The `validate_reducer_performance` function has been thoroughly tested and valid
 - ✅ **LAST_WRITE_WINS** - Update completely replaces current
 - ✅ **MOST_RESTRICTIVE** - Intersection for security (default)
 - ✅ **MOST_PERMISSIVE** - Union for maximum access
-- ✅ **MERGE_UNION** - Combine all values
-- ✅ **MERGE_INTERSECTION** - Keep only common values
 
 ### ✅ Real-World Usage Patterns
 
