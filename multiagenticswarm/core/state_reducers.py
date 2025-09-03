@@ -178,6 +178,12 @@ def merge_agent_outputs(current: Optional[Dict[str, Any]], update: Optional[Dict
             # Update existing agent output (already in structured format)
             existing = merged[agent_id]
             
+            # Add robustness: handle cases where existing data is malformed
+            if not isinstance(existing, dict) or "current" not in existing:
+                logger.warning(f"Malformed existing output for agent {agent_id}. Re-structuring.")
+                existing = _ensure_agent_output_structure(agent_id, existing, timestamp)
+                merged[agent_id] = existing
+            
             # Move current to history if it's different from new output
             if existing["current"] != output:
                 existing["history"].append({
