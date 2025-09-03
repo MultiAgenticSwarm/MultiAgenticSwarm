@@ -796,7 +796,7 @@ def merge_states(base_state: Dict[str, Any], state_updates: Dict[str, Any], **kw
     return merged
 
 
-def validate_reducer_performance(field_name: str, data_size: int, iterations: int = 100) -> Dict[str, float]:
+def validate_reducer_performance(field_name: str, data_size: int, iterations: int = 100) -> Dict[str, Union[str, int, float]]:
     """
     Validate reducer performance with synthetic test data across multiple iterations.
     
