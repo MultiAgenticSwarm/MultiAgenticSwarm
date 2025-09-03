@@ -336,69 +336,83 @@ def demo_all_reducer_types():
 
     # 5. Tool Results Reducer
     tool_results_update = {
-        "git_commit_001": {
-            "result": {"commit_hash": "abc123ef", "status": "success"},
-            "timestamp": datetime.now(timezone.utc).isoformat()
+        "tool_results": {
+            "git_commit_001": {
+                "result": {"commit_hash": "abc123ef", "status": "success"},
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
         }
     }
-    state = merge_tool_results(state, tool_results_update)
-    print_result("Tool Results", state.get("tool_results", {}))
+    state = merge_states(state, tool_results_update)
+    print_result("Tool Results", len(state.get("tool_results", {})))
 
     # 6. Memory Layers Reducer
     memory_update = {
-        "current_user": "admin_user_123",
-        "active_session": "sess_789"
+        "short_term_memory": {
+            "current_user": "admin_user_123",
+            "active_session": "sess_789"
+        }
     }
-    state = merge_memory_layers(state, memory_update)
-    print_result("Short Term Memory", state.get("short_term_memory", {}))
+    state = merge_states(state, memory_update)
+    print_result("Short Term Memory", len(state.get("short_term_memory", {})))
 
     # 7. Communication Messages Reducer
-    messages_update = [
-        {
-            "id": "msg_001",
-            "from": "frontend_dev",
-            "to": "backend_dev", 
-            "message": "API endpoints ready for integration testing",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-    ]
-    state = merge_communication_messages(state, messages_update)
-    print_result("Agent Messages", state.get("agent_messages", []))
+    messages_update = {
+        "agent_messages": [
+            {
+                "id": "msg_001",
+                "from": "frontend_dev",
+                "to": "backend_dev", 
+                "message": "API endpoints ready for integration testing",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+    }
+    state = merge_states(state, messages_update)
+    print_result("Agent Messages", len(state.get("agent_messages", [])))
 
     # 8. Execution Trace Reducer
-    execution_trace_update = [
-        {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "event": "agent_started",
-            "agent": "frontend_dev"
-        }
-    ]
-    state = merge_execution_trace(state, execution_trace_update)
-    print_result("Execution Trace", state.get("execution_trace", []))
+    execution_trace_update = {
+        "execution_trace": [
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event": "agent_started",
+                "agent": "frontend_dev"
+            }
+        ]
+    }
+    state = merge_states(state, execution_trace_update)
+    print_result("Execution Trace", len(state.get("execution_trace", [])))
 
     # 9. Progress Aggregation Reducer
     progress_update = {
-        "frontend_dev": 0.8,
-        "backend_dev": 0.6
+        "task_progress": {
+            "frontend_dev": 0.8,
+            "backend_dev": 0.6
+        }
     }
-    state = aggregate_progress(state, progress_update)
-    print_result("Progress", state.get("progress", {}))
+    state = merge_states(state, progress_update)
+    print_result("Progress", state.get("task_progress", {}))
 
     # 10. Agent Output Merger
     agent_output_update = {
-        "frontend_dev": {"output": "UI ready"},
-        "backend_dev": {"output": "API endpoints deployed"}
+        "agent_outputs": {
+            "frontend_dev": {"output": "UI ready"},
+            "backend_dev": {"output": "API endpoints deployed"}
+        }
     }
-    state = merge_agent_outputs(state, agent_output_update)
-    print_result("Agent Outputs", state.get("agent_outputs", {}))
+    state = merge_states(state, agent_output_update)
+    print_result("Agent Outputs", len(state.get("agent_outputs", {})))
 
     # 11. Permissions Resolver
     permissions_update = {
-        "frontend_dev": ["git", "prettier", "jest"],
-        "backend_dev": ["python", "kubernetes", "git"]
+        "tool_permissions": {
+            "frontend_dev": ["git", "prettier", "jest"],
+            "backend_dev": ["python", "kubernetes", "git"]
+        }
     }
-    state = resolve_permissions(state, permissions_update)
-    print_result("Tool Permissions (resolved)", state.get("tool_permissions", {}))
+    state = merge_states(state, permissions_update)
+    print_result("Tool Permissions (resolved)", len(state.get("tool_permissions", {})))
 
     # 12. State Merger
     merge_update = {
@@ -409,12 +423,14 @@ def demo_all_reducer_types():
 
     # 13. Logging Reducer (simulate log entry)
     log_entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "event": "state_updated",
-        "details": "Added new_field"
+        "execution_trace": [{
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": "state_updated",
+            "details": "Added new_field"
+        }]
     }
-    state = log_state_change(state, log_entry)
-    print_result("State Log", state.get("state_log", []))
+    state = merge_states(state, log_entry)
+    print_result("State Log", len(state.get("execution_trace", [])))
 
     # 14. Version Comparison Reducer
     version_info = compare_versions("1.0.0", "1.1.0")
@@ -425,15 +441,13 @@ def demo_all_reducer_types():
         "schema_version": SCHEMA_VERSION,
         "migrated": True
     }
-    state = migrate_state(state, migration_update)
+    state = merge_states(state, migration_update)
     print_result("Migrated State", state.get("schema_version", None))
     
-    state = merge_states(state, additional_updates)
-    
-    print_result("Tool results stored", len(state["tool_results"]))
-    print_result("Memory entries", len(state["short_term_memory"]))
-    print_result("Agent messages", len(state["agent_messages"]))
-    print_result("Execution traces", len(state["execution_trace"]))
+    print_result("Tool results stored", len(state.get("tool_results", {})))
+    print_result("Memory entries", len(state.get("short_term_memory", {})))
+    print_result("Agent messages", len(state.get("agent_messages", [])))
+    print_result("Execution traces", len(state.get("execution_trace", [])))
     
     return state
 
