@@ -332,37 +332,101 @@ def demo_all_reducer_types():
     print_result("Frontend permissions (permissive)", permissive_permissions["frontend_dev"])
     
     # Test remaining reducer types with simpler examples for brevity
-    print_subsection("5-15. Additional Reducer Types (Summary)")
-    
-    # Tool results, memory layers, communication, logging, etc.
-    additional_updates = {
-        "tool_results": {
-            "git_commit_001": {
-                "result": {"commit_hash": "abc123ef", "status": "success"},
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        },
-        "short_term_memory": {
-            "current_user": "admin_user_123",
-            "active_session": "sess_789"
-        },
-        "agent_messages": [
-            {
-                "id": "msg_001",
-                "from": "frontend_dev",
-                "to": "backend_dev", 
-                "message": "API endpoints ready for integration testing",
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
-        ],
-        "execution_trace": [
-            {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "event": "agent_started",
-                "agent": "frontend_dev"
-            }
-        ]
+    print_subsection("5-15. Additional Reducer Types (Explicit Demonstration)")
+
+    # 5. Tool Results Reducer
+    tool_results_update = {
+        "git_commit_001": {
+            "result": {"commit_hash": "abc123ef", "status": "success"},
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
     }
+    state = merge_tool_results(state, tool_results_update)
+    print_result("Tool Results", state.get("tool_results", {}))
+
+    # 6. Memory Layers Reducer
+    memory_update = {
+        "current_user": "admin_user_123",
+        "active_session": "sess_789"
+    }
+    state = merge_memory_layers(state, memory_update)
+    print_result("Short Term Memory", state.get("short_term_memory", {}))
+
+    # 7. Communication Messages Reducer
+    messages_update = [
+        {
+            "id": "msg_001",
+            "from": "frontend_dev",
+            "to": "backend_dev", 
+            "message": "API endpoints ready for integration testing",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    ]
+    state = merge_communication_messages(state, messages_update)
+    print_result("Agent Messages", state.get("agent_messages", []))
+
+    # 8. Execution Trace Reducer
+    execution_trace_update = [
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": "agent_started",
+            "agent": "frontend_dev"
+        }
+    ]
+    state = merge_execution_trace(state, execution_trace_update)
+    print_result("Execution Trace", state.get("execution_trace", []))
+
+    # 9. Progress Aggregation Reducer
+    progress_update = {
+        "frontend_dev": 0.8,
+        "backend_dev": 0.6
+    }
+    state = aggregate_progress(state, progress_update)
+    print_result("Progress", state.get("progress", {}))
+
+    # 10. Agent Output Merger
+    agent_output_update = {
+        "frontend_dev": {"output": "UI ready"},
+        "backend_dev": {"output": "API endpoints deployed"}
+    }
+    state = merge_agent_outputs(state, agent_output_update)
+    print_result("Agent Outputs", state.get("agent_outputs", {}))
+
+    # 11. Permissions Resolver
+    permissions_update = {
+        "frontend_dev": ["git", "prettier", "jest"],
+        "backend_dev": ["python", "kubernetes", "git"]
+    }
+    state = resolve_permissions(state, permissions_update)
+    print_result("Tool Permissions (resolved)", state.get("tool_permissions", {}))
+
+    # 12. State Merger
+    merge_update = {
+        "new_field": "new_value"
+    }
+    state = merge_states(state, merge_update)
+    print_result("Merged State", state.get("new_field", None))
+
+    # 13. Logging Reducer (simulate log entry)
+    log_entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "state_updated",
+        "details": "Added new_field"
+    }
+    state = log_state_change(state, log_entry)
+    print_result("State Log", state.get("state_log", []))
+
+    # 14. Version Comparison Reducer
+    version_info = compare_versions("1.0.0", "1.1.0")
+    print_result("Version Comparison", version_info)
+
+    # 15. State Migration Reducer
+    migration_update = {
+        "schema_version": SCHEMA_VERSION,
+        "migrated": True
+    }
+    state = migrate_state(state, migration_update)
+    print_result("Migrated State", state.get("schema_version", None))
     
     state = merge_states(state, additional_updates)
     
