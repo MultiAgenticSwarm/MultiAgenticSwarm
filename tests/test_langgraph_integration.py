@@ -94,9 +94,9 @@ class TestLangGraphStateFlow:
         # Create initial state with tracing enabled
         state = create_initial_state(
             collaboration_prompt="Simple agent workflow",
-            initial_message="Start processing"
+            initial_message="Start processing",
+            trace_execution=True
         )
-        state["debug_flags"]["trace_execution"] = True
         
         # Create mock node
         analyzer_node = MockLangGraphNode("analyzer", "data_analyzer")
