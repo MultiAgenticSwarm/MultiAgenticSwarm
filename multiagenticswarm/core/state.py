@@ -14,7 +14,6 @@ from typing_extensions import Annotated
 from datetime import datetime
 import re
 
-from packaging.version import Version
 from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
@@ -936,269 +935,54 @@ def log_state_change(
 
 
 # ========== State Migration System ==========
+# Migration system has been moved to state_migration.py for better organization
+# Import key functions and exceptions for backward compatibility
 
-
-class StateVersionError(Exception):
-    """Raised when state version operations fail."""
-
-    pass
-
-
-def compare_versions(version1: str, version2: str) -> int:
-    """
-    Compare two semantic version strings using the packaging library.
-
-    This implementation uses the well-established packaging.version library
-    that handles edge cases, pre-releases, and build metadata more robustly
-    than custom implementations.
-
-    Args:
-        version1: First version string (e.g., "1.0.0", "2.0.0-alpha.1")
-        version2: Second version string (e.g., "1.1.0", "2.0.0-beta.2")
-
-    Returns:
-        -1 if version1 < version2
-         0 if version1 == version2
-         1 if version1 > version2
-
-    Raises:
-        StateVersionError: If version format is invalid
-    """
-    try:
-        v1 = Version(version1)
-        v2 = Version(version2)
-
-        if v1 < v2:
-            return -1
-        elif v1 > v2:
-            return 1
-        else:
+try:
+    from .state_migration import (
+        StateVersionError,
+        compare_versions,
+        is_compatible_version,
+        migrate_state,
+        auto_migrate_state,
+        create_migration_backup,
+        restore_from_backup,
+    )
+except ImportError:
+    # Fallback if state_migration module is not available
+    logger.warning("State migration module not available. Migration functionality disabled.")
+    
+    class StateVersionError(Exception):
+        """Raised when state version operations fail."""
+        pass
+    
+    def compare_versions(version1: str, version2: str) -> int:
+        """Fallback version comparison."""
+        logger.warning("Migration system not available - using basic string comparison")
+        if version1 == version2:
             return 0
-    except Exception as e:
-        raise StateVersionError(f"Invalid version format: {e}") from e
-
-
-def is_compatible_version(state_version: str, required_version: str) -> bool:
-    """
-    Check if a state version is compatible with the required version.
-
-    Args:
-        state_version: Version of the state
-        required_version: Required minimum version
-
-    Returns:
-        True if compatible, False otherwise
-    """
-    try:
-        return compare_versions(state_version, required_version) >= 0
-    except StateVersionError:
-        logger.warning(
-            f"Unable to compare versions: {state_version} vs {required_version}"
-        )
-        return False
-
-
-# Migration function registry
-_MIGRATION_FUNCTIONS: Dict[str, Callable] = {}
-
-
-def register_migration(from_version: str, to_version: str):
-    """
-    Decorator to register a migration function.
-
-    Args:
-        from_version: Source version
-        to_version: Target version
-    """
-
-    def decorator(func):
-        key = f"{from_version}->{to_version}"
-        _MIGRATION_FUNCTIONS[key] = func
-        logger.debug(f"Registered migration function: {key}")
-        return func
-
-    return decorator
-
-
-def migrate_state(state: Dict[str, Any], target_version: str) -> Dict[str, Any]:
-    """
-    Migrate state from its current version to the target version.
-
-    Args:
-        state: State dictionary to migrate
-        target_version: Target schema version
-
-    Returns:
-        Migrated state dictionary
-
-    Raises:
-        StateVersionError: If migration is not possible
-    """
-    current_version = state.get("state_version", "0.0.0")
-
-    if current_version == target_version:
+        return -1 if version1 < version2 else 1
+    
+    def is_compatible_version(state_version: str, required_version: str) -> bool:
+        """Fallback compatibility check."""
+        return state_version == required_version
+    
+    def migrate_state(state: Dict[str, Any], target_version: str) -> Dict[str, Any]:
+        """Fallback migration - no operation."""
+        logger.warning("Migration system not available - returning state unchanged")
         return state
-
-    logger.info(f"Migrating state from version {current_version} to {target_version}")
-
-    # Find migration path
-    migration_path = _find_migration_path(current_version, target_version)
-    if not migration_path:
-        raise StateVersionError(
-            f"No migration path found from {current_version} to {target_version}"
-        )
-
-    # Apply migrations step by step
-    migrated_state = dict(state)
-    for from_ver, to_ver in migration_path:
-        migration_key = f"{from_ver}->{to_ver}"
-        if migration_key not in _MIGRATION_FUNCTIONS:
-            raise StateVersionError(f"Missing migration function: {migration_key}")
-
-        logger.debug(f"Applying migration: {migration_key}")
-        try:
-            migrated_state = _MIGRATION_FUNCTIONS[migration_key](migrated_state)
-            migrated_state["state_version"] = to_ver
-        except Exception as e:
-            raise StateVersionError(
-                f"Migration failed at {migration_key}: {str(e)}"
-            ) from e
-
-    # Validate migrated state
-    try:
-        validate_state(migrated_state)  # type: ignore
-        logger.info(
-            f"State migration completed successfully: {current_version} -> {target_version}"
-        )
-    except ValueError as e:
-        raise StateVersionError(f"Migrated state validation failed: {str(e)}") from e
-
-    return migrated_state
-
-
-def _find_migration_path(from_version: str, to_version: str) -> List[tuple]:
-    """
-    Find a migration path from source to target version.
-
-    Args:
-        from_version: Source version
-        to_version: Target version
-
-    Returns:
-        List of (from_ver, to_ver) tuples representing the migration path
-    """
-    # For now, implement simple direct migration
-    # In the future, this could implement graph search for multi-step migrations
-    direct_key = f"{from_version}->{to_version}"
-    if direct_key in _MIGRATION_FUNCTIONS:
-        return [(from_version, to_version)]
-
-    # Could implement more sophisticated path finding here
-    # For example: BFS to find shortest migration path through multiple versions
-
-    return []
-
-
-def create_migration_backup(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Create a backup of state before migration.
-
-    Args:
-        state: State to backup
-
-    Returns:
-        Deep copy of the state
-    """
-    import copy
-
-    backup = copy.deepcopy(state)
-    backup["_migration_backup"] = {
-        "timestamp": datetime.now().isoformat(),
-        "original_version": state.get("state_version", "unknown"),
-    }
-    return backup
-
-
-def restore_from_backup(backup: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Restore state from a migration backup.
-
-    Args:
-        backup: Backup state dictionary
-
-    Returns:
-        Restored state without backup metadata
-    """
-    import copy
-
-    restored = copy.deepcopy(backup)
-    restored.pop("_migration_backup", None)
-    return restored
-
-
-# Example migration functions (these would be defined based on actual schema changes)
-
-
-@register_migration("0.9.0", "1.0.0")
-def migrate_0_9_to_1_0(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Example migration from version 0.9.0 to 1.0.0.
-
-    This is a template for how migration functions should be structured.
-    """
-    migrated = dict(state)
-
-    # Example: Add new fields that were introduced in 1.0.0
-    if "debug_flags" not in migrated:
-        migrated["debug_flags"] = {
-            "trace_execution": False,
-            "log_state_changes": False,
-            "validate_permissions": True,
-            "record_performance": True,
-        }
-
-    # Example: Rename or restructure fields
-    if "old_field_name" in migrated:
-        migrated["new_field_name"] = migrated.pop("old_field_name")
-
-    # Example: Update field formats
-    if "performance_metrics" in migrated and isinstance(
-        migrated["performance_metrics"], list
-    ):
-        # Convert old list format to new dict format
-        migrated["performance_metrics"] = {
-            "total_operations": len(migrated["performance_metrics"]),
-            "operations": migrated["performance_metrics"],
-        }
-
-    logger.debug("Applied migration 0.9.0 -> 1.0.0")
-    return migrated
-
-
-def auto_migrate_state(state: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Automatically migrate state to the current schema version.
-
-    Args:
-        state: State to migrate
-
-    Returns:
-        Migrated state
-
-    Raises:
-        StateVersionError: If automatic migration fails
-    """
-    current_version = state.get("state_version", "0.0.0")
-
-    if current_version == SCHEMA_VERSION:
+    
+    def auto_migrate_state(state: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback auto-migration - no operation."""
+        logger.warning("Migration system not available - returning state unchanged")
         return state
-
-    # Create backup before migration
-    backup = create_migration_backup(state)
-
-    try:
-        return migrate_state(state, SCHEMA_VERSION)
-    except StateVersionError as e:
-        logger.error(f"Auto-migration failed: {e}")
-        logger.info("State left unchanged due to migration failure")
-        raise  # Raise the exception to alert users of incompatibility
+    
+    def create_migration_backup(state: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback backup creation."""
+        import copy
+        return copy.deepcopy(state)
+    
+    def restore_from_backup(backup: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback backup restoration."""
+        import copy
+        return copy.deepcopy(backup)
