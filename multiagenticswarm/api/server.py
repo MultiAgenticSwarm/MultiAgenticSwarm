@@ -3,6 +3,7 @@ API server for MultiAgenticSwarm.
 """
 
 from fastapi import FastAPI
+
 from ..web.app import create_app
 
 
