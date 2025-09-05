@@ -1,43 +1,72 @@
 """
-Core agent implementation with LLM provider abstraction.
+Core agent implementation with LangGraph subgraph architecture.
 """
 
 import uuid
 import time
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, TypedDict, Annotated
 import json
+import operator
 from datetime import datetime
 
-if TYPE_CHECKING:
-    from .tool import Tool
-    from .tool_executor import ToolExecutor
+# LangGraph imports
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import create_react_agent, ToolNode
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.tools import tool
 
 try:
     from pydantic import BaseModel, Field
+
     PYDANTIC_AVAILABLE = True
 except ImportError:
     PYDANTIC_AVAILABLE = False
+
     # Fallback base class
     class BaseModel:
         def __init__(self, **kwargs):
             for key, value in kwargs.items():
                 setattr(self, key, value)
-        
+
         def model_dump(self):
-            return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-    
+            return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+
     def Field(**kwargs):
-        return kwargs.get('default', None)
+        return kwargs.get("default", None)
+
 
 from ..llm.providers import LLMProvider, get_llm_provider
 from ..utils.logger import get_logger
-from .tool_parser import ToolCallParser
 
 logger = get_logger(__name__)
 
 
+# State Schemas
+class AgentSubgraphState(TypedDict):
+    """State for individual agent subgraph execution."""
+
+    messages: Annotated[List[BaseMessage], operator.add]
+    agent_name: str
+    parent_graph_id: str
+    execution_context: Dict[str, Any]
+    tool_outputs: List[Dict[str, Any]]
+
+
+# Placeholder for core state - will be implemented in state management layer
+class AgentState(TypedDict):
+    """Main state schema for multi-agent system."""
+
+    messages: Annotated[List[BaseMessage], operator.add]
+    agent_outputs: Dict[str, Any]
+    subgraph_states: Dict[str, AgentSubgraphState]
+    parent_graph_id: str
+    current_agent: str
+    execution_metadata: Dict[str, Any]
+
+
 class AgentConfig(BaseModel):
     """Configuration for an agent."""
+
     name: str
     description: str = ""
     system_prompt: str = ""
@@ -51,12 +80,12 @@ class AgentConfig(BaseModel):
 
 class Agent:
     """
-    A multi-agent system agent with pluggable LLM backend support.
-    
-    Each agent can be configured with different LLM providers and has
-    access to a hierarchical tool system (local, shared, global).
+    LangGraph-native agent implementation that works as a subgraph node.
+
+    Each agent is compiled as a complete subgraph with internal ReAct architecture,
+    maintaining its own state within the parent graph execution.
     """
-    
+
     def __init__(
         self,
         name: str,
@@ -68,10 +97,11 @@ class Agent:
         max_iterations: int = 10,
         memory_enabled: bool = True,
         agent_id: Optional[str] = None,
+        tools: Optional[List[Any]] = None,
     ):
         """
-        Initialize an agent.
-        
+        Initialize an agent as a LangGraph subgraph.
+
         Args:
             name: Unique name for the agent
             description: Description of the agent's purpose
@@ -82,10 +112,11 @@ class Agent:
             max_iterations: Maximum iterations for complex tasks
             memory_enabled: Whether to maintain conversation memory
             agent_id: Optional custom agent ID
+            tools: List of tools available to this agent
         """
         if not name or not name.strip():
             raise ValueError("Agent name cannot be empty")
-            
+
         self.id = agent_id or str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -95,327 +126,256 @@ class Agent:
         self.llm_config = llm_config or {}
         self.max_iterations = max_iterations
         self.memory_enabled = memory_enabled
-        
-        # Tool access tracking
-        self.local_tools: List[str] = []
-        self.shared_tools: List[str] = []
-        self.global_tools: List[str] = []
-        
-        # Runtime state
-        self.memory: List[Dict[str, Any]] = []
-        self.execution_context: Dict[str, Any] = {}
+        self.tools = tools or []
+
+        # LangGraph components
+        self._compiled_subgraph: Optional[StateGraph] = None
         self._llm_provider: Optional[LLMProvider] = None
-        
+
         logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model}")
-    
+
     @property
     def llm_provider(self) -> LLMProvider:
         """Get the LLM provider instance."""
         if self._llm_provider is None:
             self._llm_provider = get_llm_provider(
-                provider=self.llm_provider_name,
-                model=self.llm_model,
-                **self.llm_config
+                provider=self.llm_provider_name, model=self.llm_model, **self.llm_config
             )
         return self._llm_provider
-    
-    def add_to_memory(self, role: str, content: str, metadata: Optional[Dict] = None) -> None:
-        """Add a message to the agent's memory."""
-        if not self.memory_enabled:
-            return
-            
-        self.memory.append({
-            "role": role,
-            "content": content,
-            "metadata": metadata or {},
-            "timestamp": datetime.now().isoformat()
-        })
-    
-    def clear_memory(self) -> None:
-        """Clear the agent's memory."""
-        self.memory.clear()
-        logger.debug(f"Cleared memory for agent '{self.name}'")
-    
-    def get_available_tools(self, tool_registry: Dict[str, Any]) -> List[str]:
-        """Get all tools available to this agent."""
-        available = []
-        
-        # Add local tools
-        available.extend(self.local_tools)
-        
-        # Add shared tools where this agent has access
-        for tool_name in self.shared_tools:
-            if tool_name in tool_registry:
-                tool = tool_registry[tool_name]
-                if hasattr(tool, 'shared_agents') and self.name in tool.shared_agents:
-                    available.append(tool_name)
-        
-        # Add global tools
-        available.extend(self.global_tools)
-        
-        return list(set(available))  # Remove duplicates
-    
-    """
-    Fixed Agent execution method that handles tool calls
-    """
 
-    async def execute(
-        self, 
-        input_text: str, 
-        context: Optional[Dict[str, Any]] = None,
-        tool_executor: Optional["ToolExecutor"] = None,
-        available_tools: Optional[List[str]] = None,
-        tool_registry: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Execute a task with standardized tool support."""
+    def _create_agent_subgraph(self) -> StateGraph:
+        """
+        Create and compile the agent's internal subgraph using LangGraph's create_react_agent.
+
+        Returns:
+            Compiled StateGraph representing this agent's execution logic
+        """
+        logger.debug(f"Compiling subgraph for agent '{self.name}'")
+
+        # Get LLM provider for this agent
+        llm = self.llm_provider
+
+        # Convert tools to LangChain format if needed
+        # Placeholder - actual tool conversion will depend on tool registry implementation
+        langchain_tools = self._convert_tools_to_langchain()
+
+        # Create ReAct agent using LangGraph
+        agent_runnable = create_react_agent(llm, langchain_tools)
+
+        # Build the subgraph
+        subgraph_builder = StateGraph(AgentSubgraphState)
+        subgraph_builder.add_node("agent", agent_runnable)
+
+        # Add tools node if tools are available
+        if langchain_tools:
+            subgraph_builder.add_node("tools", ToolNode(langchain_tools))
+            subgraph_builder.add_conditional_edges(
+                "agent",
+                lambda state: "tools" if state["messages"][-1].tool_calls else END,
+            )
+            subgraph_builder.add_edge("tools", "agent")
+
+        subgraph_builder.set_entry_point("agent")
+
+        return subgraph_builder.compile()
+
+    def _convert_tools_to_langchain(self) -> List[Any]:
+        """
+        Convert internal tools to LangChain tool format.
+        Placeholder implementation - actual conversion depends on tool registry.
+        """
+        # Placeholder: Convert self.tools to LangChain tools
+        # This will be implemented when tool registry is available
+        langchain_tools = []
+
+        # Example placeholder tool
+        @tool
+        def placeholder_tool(query: str) -> str:
+            """Placeholder tool for agent execution."""
+            return f"Placeholder response for: {query}"
+
+        if self.tools:
+            langchain_tools.append(placeholder_tool)
+
+        return langchain_tools
+
+    def get_compiled_subgraph(self) -> StateGraph:
+        """
+        Get or create the compiled subgraph for this agent.
+
+        Returns:
+            Compiled StateGraph ready for execution
+        """
+        if self._compiled_subgraph is None:
+            self._compiled_subgraph = self._create_agent_subgraph()
+        return self._compiled_subgraph
+
+    def __call__(self, state: AgentState) -> Dict[str, Any]:
+        """
+        Execute agent as a LangGraph node.
+
+        This method makes the Agent compatible with StateGraph execution.
+        It reads from state, executes the agent subgraph, and returns state updates.
+
+        Args:
+            state: Current AgentState from parent graph
+
+        Returns:
+            Dictionary of state updates for the parent graph
+        """
         start_time = time.time()
-        
-        # Log the agent action start
+
         logger.log_agent_action(
             agent_name=self.name,
-            action="execute",
-            input_data=input_text,
-            context=context
+            action="subgraph_execute",
+            input_data=state.get("messages", []),
+            context={"parent_graph_id": state.get("parent_graph_id")},
         )
-        
+
         try:
-            # Add input to memory
-            self.add_to_memory("user", input_text)
-            
-            # Prepare context
-            execution_context = context or {}
-            
-            # Handle tool access - support both new tool_executor and legacy available_tools
-            if tool_executor:
-                tools_schema = tool_executor.get_tools_schema_for_agent(self.name)
-                if tools_schema:
-                    execution_context["tools"] = tools_schema
-                    # Set tool choice based on provider
-                    if self.llm_provider_name == "anthropic":
-                        execution_context["tool_choice"] = {"type": "auto"}
-                    else:
-                        execution_context["tool_choice"] = "auto"
-                    logger.debug(f"Agent {self.name}: Providing {len(tools_schema)} tools to LLM")
-            elif available_tools and tool_registry:
-                # Legacy support: create tool schemas from available_tools and tool_registry
-                tools_schemas = []
-                for tool_name in available_tools:
-                    if tool_name in tool_registry:
-                        tool = tool_registry[tool_name]
-                        if tool.can_be_used_by(self):
-                            schema = tool.get_schema()
-                            tools_schemas.append(schema)
-                
-                if tools_schemas:
-                    execution_context["tools"] = tools_schemas
-                    if self.llm_provider_name == "anthropic":
-                        execution_context["tool_choice"] = {"type": "auto"}
-                    else:
-                        execution_context["tool_choice"] = "auto"
-                    logger.debug(f"Agent {self.name}: Providing {len(tools_schemas)} legacy tools to LLM")
-            
-            # Prepare messages for LLM
-            messages = []
-            
-            # Add system prompt
-            if self.system_prompt:
-                messages.append({"role": "system", "content": self.system_prompt})
-            
-            # Add conversation history
-            for msg in self.memory[-10:]:
-                messages.append({"role": msg["role"], "content": msg["content"]})
-            
-            # Add tool parser
-            parser = ToolCallParser()
-            
-            # Start tool calling loop
-            max_iterations = self.max_iterations
-            iteration = 0
-            final_response = ""
-            
-            while iteration < max_iterations:
-                iteration += 1
-                logger.debug(f"Agent {self.name}: Tool calling iteration {iteration}")
-                
-                # Execute with LLM provider
-                response = await self.llm_provider.execute(
-                    messages=messages,
-                    context=execution_context
-                )
-                
-                # First check if LLM has native tool calling
-                tool_calls = []
-                if hasattr(self.llm_provider, 'extract_tool_calls'):
-                    tool_calls = self.llm_provider.extract_tool_calls(response)
-                
-                # If no native tool calls, parse from response content
-                if not tool_calls and response.content:
-                    tool_calls = parser.extract_tool_calls(response.content)
-                    logger.debug(f"Parsed {len(tool_calls)} tool calls from response content")
-            
-                if not tool_calls:
-                    # No tool calls, we're done
-                    final_response = response.content
-                    break
-                
-                # Execute tool calls using standardized executor or legacy tools
-                if tool_executor:
-                    logger.debug(f"Agent {self.name}: Executing {len(tool_calls)} tool calls")
-                    
-                    # Execute all tool calls
-                    tool_responses = await tool_executor.execute_tool_calls(tool_calls, self.name)
-                    
-                    # Add assistant message with tool calls to conversation
-                    messages.append({
-                        "role": "assistant",
-                        "content": response.content,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments)
-                                }
-                            } for tc in tool_calls
-                        ]
-                    })
-                    
-                    # Add tool responses to conversation
-                    if hasattr(self.llm_provider, 'create_tool_response_for_llm'):
-                        tool_messages = self.llm_provider.create_tool_response_for_llm(tool_responses)
-                        if isinstance(tool_messages, list):
-                            messages.extend(tool_messages)
-                        else:
-                            messages.append(tool_messages)
-                    
-                elif tool_registry and available_tools:
-                    # Legacy tool execution support
-                    logger.debug(f"Agent {self.name}: Executing {len(tool_calls)} tool calls (legacy mode)")
-                    
-                    # Execute tool calls using legacy tools
-                    tool_results = []
-                    for tool_call in tool_calls:
-                        if tool_call.name in tool_registry and tool_call.name in available_tools:
-                            tool = tool_registry[tool_call.name]
-                            try:
-                                if tool.can_be_used_by(self):
-                                    result = await tool.execute(self, **tool_call.arguments)
-                                    tool_results.append({
-                                        "tool_call_id": tool_call.id,
-                                        "output": str(result.get('output', result))
-                                    })
-                                else:
-                                    tool_results.append({
-                                        "tool_call_id": tool_call.id, 
-                                        "output": f"Permission denied for tool {tool_call.name}"
-                                    })
-                            except Exception as e:
-                                tool_results.append({
-                                    "tool_call_id": tool_call.id,
-                                    "output": f"Tool execution error: {str(e)}"
-                                })
-                    
-                    # Add assistant message with tool calls to conversation
-                    messages.append({
-                        "role": "assistant", 
-                        "content": response.content,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": "function", 
-                                "function": {
-                                    "name": tc.name,
-                                    "arguments": json.dumps(tc.arguments)
-                                }
-                            } for tc in tool_calls
-                        ]
-                    })
-                    
-                    # Add tool results to conversation  
-                    for result in tool_results:
-                        # Check if provider is Anthropic and format accordingly
-                        if self.llm_provider_name == "anthropic":
-                            messages.append({
-                                "role": "user",
-                                "content": [
-                                    {
-                                        "type": "tool_result",
-                                        "tool_use_id": result["tool_call_id"],
-                                        "content": json.dumps(result["output"])
-                                    }
-                                ]
-                            })
-                        else:
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": result["tool_call_id"],
-                                "content": json.dumps(result["output"])
-                            })
-                
-                else:
-                    # No tool execution available
-                    logger.warning(f"Agent {self.name}: Tool calls requested but no tool executor or registry available")
-                    final_response = response.content
-                    break
-            
-            # If we ran out of iterations, use the last response
-            if iteration >= max_iterations and not final_response:
-                final_response = "Maximum tool calling iterations reached."
-                logger.warning(f"Agent {self.name}: Reached maximum tool calling iterations")
-            
-            # Add final response to memory
-            self.add_to_memory("assistant", final_response)
-            
-            execution_time = time.time() - start_time
-            
-            # Create result
-            result = {
-                "agent_id": self.id,
+            # Extract input from parent state
+            parent_messages = state.get("messages", [])
+            parent_graph_id = state.get("parent_graph_id", "")
+
+            # Prepare subgraph input state
+            subgraph_input = {
+                "messages": parent_messages,
                 "agent_name": self.name,
-                "input": input_text,
-                "output": final_response,
-                "tool_calls_made": iteration - 1,
-                "execution_time": execution_time,
-                "success": True
+                "parent_graph_id": parent_graph_id,
+                "execution_context": state.get("execution_metadata", {}),
+                "tool_outputs": [],
             }
-            
+
+            # Get compiled subgraph
+            subgraph = self.get_compiled_subgraph()
+
+            # Execute subgraph with streaming support
+            final_subgraph_state = None
+            for chunk in subgraph.stream(
+                subgraph_input, config={"recursion_limit": self.max_iterations}
+            ):
+                final_subgraph_state = chunk
+                # Here we could emit partial updates if needed
+
+            if not final_subgraph_state:
+                raise RuntimeError(f"Agent {self.name} subgraph execution failed")
+
+            # Extract results from final subgraph state
+            last_node_key = list(final_subgraph_state.keys())[0]
+            final_messages = final_subgraph_state[last_node_key]["messages"]
+            final_answer = final_messages[-1].content if final_messages else ""
+
+            # Update parent state
+            updated_subgraph_states = state.get("subgraph_states", {}).copy()
+            updated_subgraph_states[self.name] = final_subgraph_state[last_node_key]
+
+            updated_agent_outputs = state.get("agent_outputs", {}).copy()
+            updated_agent_outputs[self.name] = {
+                "output": final_answer,
+                "execution_time": time.time() - start_time,
+                "messages": final_messages,
+                "success": True,
+            }
+
+            execution_time = time.time() - start_time
+
             logger.log_agent_action(
                 agent_name=self.name,
-                action="execute_complete",
-                input_data=input_text,
-                output_data=final_response,
+                action="subgraph_complete",
+                output_data=final_answer,
                 context={
                     "execution_time": execution_time,
-                    "tool_iterations": iteration - 1
-                }
+                    "parent_graph_id": parent_graph_id,
+                },
             )
-            
-            return result
-            
+
+            # Return state updates for parent graph
+            return {
+                "subgraph_states": updated_subgraph_states,
+                "agent_outputs": updated_agent_outputs,
+                "current_agent": self.name,
+                "messages": final_messages,  # This will be added to existing messages due to Annotated[List, operator.add]
+            }
+
         except Exception as e:
             execution_time = time.time() - start_time
-            
+
             logger.log_agent_action(
                 agent_name=self.name,
-                action="execute_error",
-                input_data=input_text,
-                context={
-                    "error": str(e),
-                    "execution_time": execution_time
-                }
+                action="subgraph_error",
+                context={"error": str(e), "execution_time": execution_time},
             )
-            
-            return {
-                "agent_id": self.id,
-                "agent_name": self.name,
-                "input": input_text,
+
+            # Return error state update
+            updated_agent_outputs = state.get("agent_outputs", {}).copy()
+            updated_agent_outputs[self.name] = {
                 "output": "",
                 "error": str(e),
                 "execution_time": execution_time,
-                "success": False
+                "success": False,
             }
-    
+
+            return {
+                "agent_outputs": updated_agent_outputs,
+                "current_agent": self.name,
+            }
+
+    # Backward compatibility method
+    async def execute(
+        self, input_text: str, context: Optional[Dict[str, Any]] = None, **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Backward compatibility method for legacy execute() calls.
+
+        This method wraps the new __call__ interface to maintain compatibility
+        with existing code that uses agent.execute().
+        """
+        logger.warning(
+            f"Using deprecated execute() method for agent {self.name}. Use agent(state) instead."
+        )
+
+        # Convert legacy parameters to AgentState format
+        legacy_state = {
+            "messages": [HumanMessage(content=input_text)],
+            "agent_outputs": {},
+            "subgraph_states": {},
+            "parent_graph_id": str(uuid.uuid4()),
+            "current_agent": self.name,
+            "execution_metadata": context or {},
+        }
+
+        # Execute using new __call__ method
+        result_state = self.__call__(legacy_state)
+
+        # Convert back to legacy format
+        agent_output = result_state.get("agent_outputs", {}).get(self.name, {})
+
+        return {
+            "agent_id": self.id,
+            "agent_name": self.name,
+            "input": input_text,
+            "output": agent_output.get("output", ""),
+            "execution_time": agent_output.get("execution_time", 0),
+            "success": agent_output.get("success", False),
+            "error": agent_output.get("error"),
+        }
+
+    def create_subgraph_node_runner(self):
+        """
+        Factory method to create a function that acts as a node in parent graphs.
+
+        This follows the pattern from the working example you provided.
+
+        Returns:
+            Function that can be used as a node in a parent StateGraph
+        """
+
+        def run_agent_subgraph(parent_state: AgentState) -> Dict[str, Any]:
+            """Node runner function for parent graph execution."""
+            return self.__call__(parent_state)
+
+        return run_agent_subgraph
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert agent to dictionary representation."""
         return {
@@ -428,11 +388,9 @@ class Agent:
             "llm_config": self.llm_config,
             "max_iterations": self.max_iterations,
             "memory_enabled": self.memory_enabled,
-            "local_tools": self.local_tools,
-            "shared_tools": self.shared_tools,
-            "global_tools": self.global_tools
+            "tools": [str(tool) for tool in self.tools],  # Serialize tools
         }
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Agent":
         """Create agent from dictionary representation."""
@@ -445,20 +403,16 @@ class Agent:
             llm_config=data.get("llm_config", {}),
             max_iterations=data.get("max_iterations", 10),
             memory_enabled=data.get("memory_enabled", True),
-            agent_id=data.get("id")
+            agent_id=data.get("id"),
+            tools=data.get("tools", []),  # Tools will need proper deserialization
         )
-        
-        # Restore tool assignments
-        agent.local_tools = data.get("local_tools", [])
-        agent.shared_tools = data.get("shared_tools", [])
-        agent.global_tools = data.get("global_tools", [])
-        
+
         return agent
-    
+
     @classmethod
     def from_config(cls, config: AgentConfig) -> "Agent":
         """Create agent from configuration object."""
         return cls.from_dict(config.model_dump())
-    
+
     def __repr__(self) -> str:
-        return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}')"
+        return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}', subgraph=True)"
