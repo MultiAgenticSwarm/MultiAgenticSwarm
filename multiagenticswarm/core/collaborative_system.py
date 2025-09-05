@@ -5,14 +5,14 @@ Enhanced collaborative system with universal agent capabilities and centralized 
 import asyncio
 import os
 import subprocess
-from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-from .system import System
-from .agent import Agent
-from .delegation import SimpleDelegator, DelegationStrategy
 from ..tools.collaboration_tools import create_progress_board_tool
 from ..utils.logger import get_logger
+from .agent import Agent
+from .delegation import DelegationStrategy, SimpleDelegator
+from .system import System
 
 logger = get_logger(__name__)
 
@@ -40,7 +40,7 @@ class UniversalAgent(Agent):
         memory_enabled: bool = True,
         agent_id: Optional[str] = None,
         progress_board=None,
-        collaboration_prompt: str = ""
+        collaboration_prompt: str = "",
     ):
         """
         Initialize universal agent with collaboration capabilities.
@@ -51,7 +51,9 @@ class UniversalAgent(Agent):
             (other args same as base Agent)
         """
         # Enhance system prompt with collaboration instructions
-        enhanced_prompt = self._create_enhanced_system_prompt(system_prompt, description, collaboration_prompt)
+        enhanced_prompt = self._create_enhanced_system_prompt(
+            system_prompt, description, collaboration_prompt
+        )
 
         super().__init__(
             name=name,
@@ -62,7 +64,7 @@ class UniversalAgent(Agent):
             llm_config=llm_config,
             max_iterations=max_iterations,
             memory_enabled=memory_enabled,
-            agent_id=agent_id
+            agent_id=agent_id,
         )
 
         # Collaboration state
@@ -74,7 +76,9 @@ class UniversalAgent(Agent):
 
         logger.info(f"Created UniversalAgent '{name}' with collaboration capabilities")
 
-    def _create_enhanced_system_prompt(self, original_prompt: str, description: str, collaboration_prompt: str = "") -> str:
+    def _create_enhanced_system_prompt(
+        self, original_prompt: str, description: str, collaboration_prompt: str = ""
+    ) -> str:
         """Create enhanced system prompt with collaboration instructions."""
         collaboration_instructions = f"""
 
@@ -138,7 +142,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
         task: str,
         percentage: int,
         details: str,
-        estimated_completion: Optional[str] = None
+        estimated_completion: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Report task progress to the team.
@@ -161,10 +165,12 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 task=task,
                 percentage=percentage,
                 details=details,
-                estimated_completion=estimated_completion
+                estimated_completion=estimated_completion,
             )
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for reporting")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for reporting"
+            )
             return {"success": False, "error": "No progress board available"}
 
     async def analyze_project_state(self) -> Dict[str, Any]:
@@ -188,14 +194,14 @@ Remember: You're part of a team working toward a common goal. Collaborate active
             "active_agents": len(project_status["active_agents"]),
             "recent_updates": len(recent_activity["recent_updates"]),
             "overall_progress": project_status["overall_progress"],
-            "collaboration_prompt_available": prompt_info["has_prompt"]
+            "collaboration_prompt_available": prompt_info["has_prompt"],
         }
 
         # Get my current context
         my_status = {
             "current_task": self.current_task,
             "task_progress": self.task_progress,
-            "role_from_prompt": None
+            "role_from_prompt": None,
         }
 
         # Parse role from collaboration prompt
@@ -210,7 +216,9 @@ Remember: You're part of a team working toward a common goal. Collaborate active
             "my_status": my_status,
             "collaboration_prompt": prompt_info["collaboration_prompt"],
             "recent_activity": recent_activity["agent_activity"],
-            "needs_attention": self._identify_needs_attention(project_status, recent_activity)
+            "needs_attention": self._identify_needs_attention(
+                project_status, recent_activity
+            ),
         }
 
     def _parse_my_role(self, collaboration_prompt: str) -> Optional[str]:
@@ -218,13 +226,18 @@ Remember: You're part of a team working toward a common goal. Collaborate active
         if not collaboration_prompt:
             return None
 
-        lines = collaboration_prompt.split('\n')
+        lines = collaboration_prompt.split("\n")
         for line in lines:
-            if self.name.lower() in line.lower() or any(keyword in self.name.lower() for keyword in ["ui", "audio", "data"]):
+            if self.name.lower() in line.lower() or any(
+                keyword in self.name.lower() for keyword in ["ui", "audio", "data"]
+            ):
                 # Extract role description
                 if ":" in line:
                     return line.split(":", 1)[1].strip()
-                elif any(verb in line.lower() for verb in ["focuses", "handles", "manages", "responsible"]):
+                elif any(
+                    verb in line.lower()
+                    for verb in ["focuses", "handles", "manages", "responsible"]
+                ):
                     return line.strip()
 
         # Fallback: parse based on agent name
@@ -238,25 +251,30 @@ Remember: You're part of a team working toward a common goal. Collaborate active
             return "General development support"
 
     def _identify_needs_attention(
-        self,
-        project_status: Dict[str, Any],
-        recent_activity: Dict[str, Any]
+        self, project_status: Dict[str, Any], recent_activity: Dict[str, Any]
     ) -> List[str]:
         """Identify items that need attention."""
         needs_attention = []
 
         # Check for stalled progress
         if project_status["overall_progress"] < 10:
-            needs_attention.append("Project progress is very low - may need task breakdown")
+            needs_attention.append(
+                "Project progress is very low - may need task breakdown"
+            )
 
         # Check for inactive agents
         active_agents = set(project_status["active_agents"])
         all_agents = recent_activity.get("agent_activity", {}).keys()
         if len(active_agents) < len(all_agents) * 0.5:
-            needs_attention.append("Some agents appear inactive - may need coordination")
+            needs_attention.append(
+                "Some agents appear inactive - may need coordination"
+            )
 
         # Check for help requests
-        if any("help_request" in str(activity) for activity in recent_activity.get("recent_updates", [])):
+        if any(
+            "help_request" in str(activity)
+            for activity in recent_activity.get("recent_updates", [])
+        ):
             needs_attention.append("There are pending help requests")
 
         return needs_attention
@@ -265,7 +283,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
         self,
         message: str,
         coordination_type: str = "general",
-        target_agents: Optional[List[str]] = None
+        target_agents: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Coordinate with team members through progress board.
@@ -283,10 +301,12 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 agent_name=self.name,
                 message=message,
                 coordination_type=coordination_type,
-                target_agents=target_agents
+                target_agents=target_agents,
             )
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for coordination")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for coordination"
+            )
             return {"success": False, "error": "No progress board available"}
 
     async def request_help(
@@ -294,7 +314,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
         topic: str,
         details: str,
         target_agent: Optional[str] = None,
-        priority: str = "normal"
+        priority: str = "normal",
     ) -> Dict[str, Any]:
         """
         Request help from team members.
@@ -314,10 +334,12 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 topic=topic,
                 details=details,
                 target_agent=target_agent,
-                priority=priority
+                priority=priority,
             )
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for help request")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for help request"
+            )
             return {"success": False, "error": "No progress board available"}
 
     async def respond_to_help(
@@ -325,7 +347,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
         help_request_id: str,
         response: str,
         code_snippet: Optional[str] = None,
-        additional_resources: Optional[List[str]] = None
+        additional_resources: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Respond to a help request from another agent.
@@ -344,10 +366,12 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 agent_name=self.name,
                 request_id=int(help_request_id),
                 response=response,
-                code_provided=code_snippet is not None
+                code_provided=code_snippet is not None,
             )
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for help response")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for help response"
+            )
             return {"success": False, "error": "No progress board available"}
 
     async def read_collaboration_prompt(self) -> Dict[str, Any]:
@@ -370,7 +394,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 "collaboration_prompt": collaboration_prompt,
                 "my_role": my_role,
                 "project_name": prompt_info["project_name"],
-                "instructions_available": True
+                "instructions_available": True,
             }
         else:
             return {
@@ -378,14 +402,11 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 "my_role": None,
                 "project_name": prompt_info["project_name"],
                 "instructions_available": False,
-                "message": "No collaboration prompt set for this project"
+                "message": "No collaboration prompt set for this project",
             }
 
     async def share_code_interface(
-        self,
-        interface_name: str,
-        methods: List[str],
-        description: Optional[str] = None
+        self, interface_name: str, methods: List[str], description: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Share a code interface definition with the team.
@@ -403,10 +424,12 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 agent_name=self.name,
                 interface_name=interface_name,
                 methods=methods,
-                description=description
+                description=description,
             )
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for interface sharing")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for interface sharing"
+            )
             return {"success": False, "error": "No progress board available"}
 
     async def share_code_snippet(
@@ -414,7 +437,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
         snippet: str,
         description: str,
         language: str = "dart",
-        file_path: Optional[str] = None
+        file_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Share a code snippet with the team.
@@ -434,16 +457,16 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 snippet=snippet,
                 description=description,
                 language=language,
-                file_path=file_path
+                file_path=file_path,
             )
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for code sharing")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for code sharing"
+            )
             return {"success": False, "error": "No progress board available"}
 
     async def get_team_updates(
-        self,
-        hours: int = 24,
-        agent_filter: Optional[str] = None
+        self, hours: int = 24, agent_filter: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Get recent updates from team members.
@@ -468,7 +491,9 @@ Remember: You're part of a team working toward a common goal. Collaborate active
 
             return activity
         else:
-            logger.warning(f"Agent {self.name}: No progress board available for team updates")
+            logger.warning(
+                f"Agent {self.name}: No progress board available for team updates"
+            )
             return {"error": "No progress board available"}
 
     async def get_project_status(self) -> Dict[str, Any]:
@@ -480,7 +505,7 @@ Remember: You're part of a team working toward a common goal. Collaborate active
                 "overall_progress": 0,
                 "active_agents": [],
                 "total_agents": len(self.universal_agents),
-                "recent_updates": []
+                "recent_updates": [],
             }
 
 
@@ -501,7 +526,7 @@ class CollaborativeSystem(System):
         workspace_dir: str = ".",
         config_path: Optional[str] = None,
         enable_logging: bool = True,
-        verbose: bool = False
+        verbose: bool = False,
     ):
         """
         Initialize collaborative system.
@@ -513,15 +538,16 @@ class CollaborativeSystem(System):
             enable_logging: Enable logging
             verbose: Verbose logging
         """
-        super().__init__(config_path=config_path, enable_logging=enable_logging, verbose=verbose)
+        super().__init__(
+            config_path=config_path, enable_logging=enable_logging, verbose=verbose
+        )
 
         # Create progress board
         self.workspace_dir = Path(workspace_dir)
         self.workspace_dir.mkdir(exist_ok=True)
 
         self.progress_board = create_progress_board_tool(
-            board_file="progress_board.json",
-            workspace_dir=str(self.workspace_dir)
+            board_file="progress_board.json", workspace_dir=str(self.workspace_dir)
         )
 
         # Register progress board as global tool
@@ -576,7 +602,7 @@ class CollaborativeSystem(System):
                 llm_config=agent.llm_config,
                 max_iterations=agent.max_iterations,
                 memory_enabled=agent.memory_enabled,
-                agent_id=agent.id
+                agent_id=agent.id,
             )
 
         # Set up collaboration tools
@@ -591,7 +617,9 @@ class CollaborativeSystem(System):
         for agent_name, universal_agent_ref in self.universal_agents.items():
             universal_agent_ref.set_team_members(agent_names)
 
-        logger.info(f"Added UniversalAgent '{universal_agent.name}' to collaborative system")
+        logger.info(
+            f"Added UniversalAgent '{universal_agent.name}' to collaborative system"
+        )
 
     def add_agents(self, agents: List[Union[Agent, UniversalAgent]]) -> None:
         """Add multiple agents to the system."""
@@ -601,9 +629,11 @@ class CollaborativeSystem(System):
     async def execute_collaborative_task(
         self,
         task: str,
-        delegation_strategy: Union[str, DelegationStrategy] = DelegationStrategy.COLLABORATIVE,
+        delegation_strategy: Union[
+            str, DelegationStrategy
+        ] = DelegationStrategy.COLLABORATIVE,
         lead_agent: Optional[str] = None,
-        collaboration_prompt: Optional[str] = None
+        collaboration_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a collaborative task using specified delegation strategy.
@@ -632,15 +662,19 @@ class CollaborativeSystem(System):
             raise ValueError("No agents available for collaborative task execution")
 
         logger.info(f"Starting collaborative task: {task[:100]}...")
-        logger.info(f"Using {delegation_strategy} delegation with {len(agent_names)} agents")
+        logger.info(
+            f"Using {delegation_strategy} delegation with {len(agent_names)} agents"
+        )
 
         # Create delegator if not already created
         if self.delegator is None:
-            current_prompt = self.get_collaboration_prompt().get("collaboration_prompt", "")
+            current_prompt = self.get_collaboration_prompt().get(
+                "collaboration_prompt", ""
+            )
             self.delegator = SimpleDelegator(
                 strategy=delegation_strategy,
                 collaboration_prompt=current_prompt,
-                progress_board=self.progress_board
+                progress_board=self.progress_board,
             )
 
         # Delegate the task
@@ -648,7 +682,7 @@ class CollaborativeSystem(System):
             main_task=task,
             agents=agent_names,
             strategy=delegation_strategy,
-            lead_agent=lead_agent
+            lead_agent=lead_agent,
         )
 
         # Post task start to progress board
@@ -656,7 +690,7 @@ class CollaborativeSystem(System):
             agent_name="CollaborativeSystem",
             message=f"Collaborative task started: {task[:50]}...",
             update_type="task_start",
-            tags=["task", delegation_strategy.value]
+            tags=["task", delegation_strategy.value],
         )
 
         logger.info(f"Task delegation completed using {delegation_strategy} strategy")
@@ -665,13 +699,11 @@ class CollaborativeSystem(System):
             "delegation_strategy": delegation_strategy.value,
             "delegation_result": delegation_result,
             "participating_agents": agent_names,
-            "status": "delegated"
+            "status": "delegated",
         }
 
     async def delegate_tasks_from_prompt(
-        self,
-        main_task: str,
-        collaboration_prompt: str
+        self, main_task: str, collaboration_prompt: str
     ) -> Dict[str, Any]:
         """
         Delegate tasks based on collaboration prompt instructions.
@@ -704,7 +736,7 @@ class CollaborativeSystem(System):
             "agent_roles": prompt_analysis.get("agent_roles", {}),
             "phases": prompt_analysis.get("phases", []),
             "assignments": {},
-            "coordination_rules": prompt_analysis.get("coordination_rules", [])
+            "coordination_rules": prompt_analysis.get("coordination_rules", []),
         }
 
         # Assign tasks to agents based on their roles in the prompt
@@ -720,12 +752,19 @@ class CollaborativeSystem(System):
             task="task_delegation",
             progress=100,
             update_type="coordination",
-            tags=["delegation", "prompt-based", f"phases:{len(delegation['phases'])}", f"agents:{len(delegation['assignments'])}"]
+            tags=[
+                "delegation",
+                "prompt-based",
+                f"phases:{len(delegation['phases'])}",
+                f"agents:{len(delegation['assignments'])}",
+            ],
         )
 
         return delegation
 
-    async def _analyze_collaboration_prompt(self, collaboration_prompt: str) -> Dict[str, Any]:
+    async def _analyze_collaboration_prompt(
+        self, collaboration_prompt: str
+    ) -> Dict[str, Any]:
         """
         Analyze collaboration prompt to extract roles, phases, and rules.
 
@@ -741,7 +780,7 @@ class CollaborativeSystem(System):
         coordination_rules = []
 
         # Parse the prompt text to identify agent responsibilities
-        lines = collaboration_prompt.strip().split('\n')
+        lines = collaboration_prompt.strip().split("\n")
         current_section = None
         current_phase = None
 
@@ -752,30 +791,47 @@ class CollaborativeSystem(System):
 
             # Look for agent definitions
             for agent_name in self.universal_agents.keys():
-                if agent_name in line and ("focuses" in line or "handles" in line or "manages" in line or "responsible" in line):
+                if agent_name in line and (
+                    "focuses" in line
+                    or "handles" in line
+                    or "manages" in line
+                    or "responsible" in line
+                ):
                     # Extract role description
                     role_desc = line.split(agent_name)[-1].strip()
                     if role_desc.startswith(("focuses", "handles", "manages")):
                         agent_roles[agent_name] = {
                             "description": role_desc,
                             "responsibilities": [],
-                            "primary_focus": self._extract_primary_focus(role_desc)
+                            "primary_focus": self._extract_primary_focus(role_desc),
                         }
 
             # Look for development phases
             if "phase" in line.lower() or line.strip().endswith(":"):
-                if any(keyword in line.lower() for keyword in ["setup", "development", "integration", "testing", "polish"]):
+                if any(
+                    keyword in line.lower()
+                    for keyword in [
+                        "setup",
+                        "development",
+                        "integration",
+                        "testing",
+                        "polish",
+                    ]
+                ):
                     phase_info = {
                         "name": line.rstrip(":"),
                         "type": "sequential",  # Default
                         "agents": list(self.universal_agents.keys()),
-                        "description": line
+                        "description": line,
                     }
                     phases.append(phase_info)
                     current_phase = phase_info
 
             # Look for coordination rules
-            if line.startswith(("-", "•", "*")) and any(keyword in line.lower() for keyword in ["share", "review", "coordinate", "help", "communicate"]):
+            if line.startswith(("-", "•", "*")) and any(
+                keyword in line.lower()
+                for keyword in ["share", "review", "coordinate", "help", "communicate"]
+            ):
                 coordination_rules.append(line.lstrip("-•* "))
 
         # If no explicit phases found, create default phases based on agent roles
@@ -785,7 +841,7 @@ class CollaborativeSystem(System):
         return {
             "agent_roles": agent_roles,
             "phases": phases,
-            "coordination_rules": coordination_rules
+            "coordination_rules": coordination_rules,
         }
 
     def _extract_primary_focus(self, role_description: str) -> str:
@@ -793,7 +849,7 @@ class CollaborativeSystem(System):
         focus_keywords = {
             "ui": ["ui", "user interface", "design", "screens", "widgets"],
             "audio": ["audio", "music", "playback", "streaming", "sound"],
-            "data": ["data", "models", "state", "storage", "database", "persistence"]
+            "data": ["data", "models", "state", "storage", "database", "persistence"],
         }
 
         role_lower = role_description.lower()
@@ -803,51 +859,75 @@ class CollaborativeSystem(System):
 
         return "general"
 
-    def _create_default_phases(self, agent_roles: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _create_default_phases(
+        self, agent_roles: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """Create default development phases based on agent roles."""
         phases = []
 
         # Phase 1: Architecture and Setup (Data first)
-        data_agents = [name for name, role in agent_roles.items() if role.get("primary_focus") == "data"]
+        data_agents = [
+            name
+            for name, role in agent_roles.items()
+            if role.get("primary_focus") == "data"
+        ]
         if data_agents:
-            phases.append({
-                "name": "Phase 1: Data Architecture & Setup",
-                "type": "sequential",
-                "agents": data_agents,
-                "description": "Setup data models, state management, and storage"
-            })
+            phases.append(
+                {
+                    "name": "Phase 1: Data Architecture & Setup",
+                    "type": "sequential",
+                    "agents": data_agents,
+                    "description": "Setup data models, state management, and storage",
+                }
+            )
 
         # Phase 2: Core Services (Audio/Backend)
-        service_agents = [name for name, role in agent_roles.items() if role.get("primary_focus") == "audio"]
+        service_agents = [
+            name
+            for name, role in agent_roles.items()
+            if role.get("primary_focus") == "audio"
+        ]
         if service_agents:
-            phases.append({
-                "name": "Phase 2: Core Services & Audio",
-                "type": "sequential",
-                "agents": service_agents,
-                "description": "Implement core services and audio functionality"
-            })
+            phases.append(
+                {
+                    "name": "Phase 2: Core Services & Audio",
+                    "type": "sequential",
+                    "agents": service_agents,
+                    "description": "Implement core services and audio functionality",
+                }
+            )
 
         # Phase 3: User Interface
-        ui_agents = [name for name, role in agent_roles.items() if role.get("primary_focus") == "ui"]
+        ui_agents = [
+            name
+            for name, role in agent_roles.items()
+            if role.get("primary_focus") == "ui"
+        ]
         if ui_agents:
-            phases.append({
-                "name": "Phase 3: User Interface",
-                "type": "sequential",
-                "agents": ui_agents,
-                "description": "Build user interface and navigation"
-            })
+            phases.append(
+                {
+                    "name": "Phase 3: User Interface",
+                    "type": "sequential",
+                    "agents": ui_agents,
+                    "description": "Build user interface and navigation",
+                }
+            )
 
         # Phase 4: Integration (All agents)
-        phases.append({
-            "name": "Phase 4: Integration & Testing",
-            "type": "collaborative",
-            "agents": list(agent_roles.keys()),
-            "description": "Integrate components and test the complete application"
-        })
+        phases.append(
+            {
+                "name": "Phase 4: Integration & Testing",
+                "type": "collaborative",
+                "agents": list(agent_roles.keys()),
+                "description": "Integrate components and test the complete application",
+            }
+        )
 
         return phases
 
-    def _generate_agent_tasks(self, agent_name: str, role_info: Dict[str, Any], main_task: str) -> List[str]:
+    def _generate_agent_tasks(
+        self, agent_name: str, role_info: Dict[str, Any], main_task: str
+    ) -> List[str]:
         """Generate specific tasks for an agent based on their role."""
         primary_focus = role_info.get("primary_focus", "general")
 
@@ -858,7 +938,7 @@ class CollaborativeSystem(System):
                 "Build home screen with playlist grid",
                 "Design player screen with controls",
                 "Create search screen with filtering",
-                "Implement responsive layout components"
+                "Implement responsive layout components",
             ],
             "audio": [
                 "Create core audio service for playback",
@@ -866,7 +946,7 @@ class CollaborativeSystem(System):
                 "Build offline audio playback system",
                 "Create audio player controls widget",
                 "Implement playlist management audio logic",
-                "Add audio state management and notifications"
+                "Add audio state management and notifications",
             ],
             "data": [
                 "Design and implement Track data model",
@@ -874,20 +954,21 @@ class CollaborativeSystem(System):
                 "Setup state management with Provider/Riverpod",
                 "Implement local storage with Hive/SQLite",
                 "Create API integration layer",
-                "Build user preferences and settings management"
-            ]
+                "Build user preferences and settings management",
+            ],
         }
 
-        return task_templates.get(primary_focus, [
-            f"Contribute to {main_task} based on collaboration prompt",
-            "Coordinate with team members",
-            "Review and integrate with other components"
-        ])
+        return task_templates.get(
+            primary_focus,
+            [
+                f"Contribute to {main_task} based on collaboration prompt",
+                "Coordinate with team members",
+                "Review and integrate with other components",
+            ],
+        )
 
     async def execute_collaboration_phase(
-        self,
-        phase: Dict[str, Any],
-        main_task: str
+        self, phase: Dict[str, Any], main_task: str
     ) -> Dict[str, Any]:
         """
         Execute a specific collaboration phase.
@@ -913,7 +994,7 @@ class CollaborativeSystem(System):
             task=phase_name.lower().replace(" ", "_"),
             progress=0,
             update_type="phase_start",
-            tags=["collaboration", phase_type, f"agents:{len(phase_agents)}"]
+            tags=["collaboration", phase_type, f"agents:{len(phase_agents)}"],
         )
 
         results = {}
@@ -924,7 +1005,9 @@ class CollaborativeSystem(System):
             for agent_name in phase_agents:
                 if agent_name in self.universal_agents:
                     agent = self.universal_agents[agent_name]
-                    result = await self._execute_agent_phase_work(agent, phase, main_task)
+                    result = await self._execute_agent_phase_work(
+                        agent, phase, main_task
+                    )
                     results[agent_name] = result
 
         elif phase_type == "parallel":
@@ -933,7 +1016,9 @@ class CollaborativeSystem(System):
             for agent_name in phase_agents:
                 if agent_name in self.universal_agents:
                     agent = self.universal_agents[agent_name]
-                    tasks.append(self._execute_agent_phase_work(agent, phase, main_task))
+                    tasks.append(
+                        self._execute_agent_phase_work(agent, phase, main_task)
+                    )
 
             # Wait for all to complete
             if tasks:
@@ -944,7 +1029,9 @@ class CollaborativeSystem(System):
 
         elif phase_type == "collaborative":
             # All agents work together with coordination
-            results = await self._execute_collaborative_phase_work(phase_agents, phase, main_task)
+            results = await self._execute_collaborative_phase_work(
+                phase_agents, phase, main_task
+            )
 
         # Post phase completion
         self.progress_board.post_update(
@@ -953,16 +1040,17 @@ class CollaborativeSystem(System):
             task=phase_name.lower().replace(" ", "_"),
             progress=100,
             update_type="phase_complete",
-            tags=["collaboration", "completed", f"deliverables:{sum(len(result.get('deliverables', [])) for result in results.values())}"]
+            tags=[
+                "collaboration",
+                "completed",
+                f"deliverables:{sum(len(result.get('deliverables', [])) for result in results.values())}",
+            ],
         )
 
         return results
 
     async def _execute_agent_phase_work(
-        self,
-        agent: UniversalAgent,
-        phase: Dict[str, Any],
-        main_task: str
+        self, agent: UniversalAgent, phase: Dict[str, Any], main_task: str
     ) -> Dict[str, Any]:
         """
         Execute an agent's work for a specific phase.
@@ -985,11 +1073,25 @@ class CollaborativeSystem(System):
         deliverables = []
 
         if "data" in phase_name.lower() and agent_focus == "data":
-            deliverables = ["Track.dart", "Playlist.dart", "UserPreferences.dart", "AppState.dart"]
+            deliverables = [
+                "Track.dart",
+                "Playlist.dart",
+                "UserPreferences.dart",
+                "AppState.dart",
+            ]
         elif "audio" in phase_name.lower() and agent_focus == "audio":
-            deliverables = ["AudioService.dart", "StreamingService.dart", "PlayerControls.dart"]
+            deliverables = [
+                "AudioService.dart",
+                "StreamingService.dart",
+                "PlayerControls.dart",
+            ]
         elif "ui" in phase_name.lower() and agent_focus == "ui":
-            deliverables = ["HomeScreen.dart", "PlayerScreen.dart", "SearchScreen.dart", "AppTheme.dart"]
+            deliverables = [
+                "HomeScreen.dart",
+                "PlayerScreen.dart",
+                "SearchScreen.dart",
+                "AppTheme.dart",
+            ]
         elif "integration" in phase_name.lower():
             deliverables = ["Integration tests", "Code reviews", "Bug fixes"]
 
@@ -997,21 +1099,18 @@ class CollaborativeSystem(System):
         await agent.report_progress(
             task=phase_name,
             percentage=100,
-            details=f"Completed {len(deliverables)} deliverables for {phase_name}"
+            details=f"Completed {len(deliverables)} deliverables for {phase_name}",
         )
 
         return {
             "status": "completed",
             "deliverables": deliverables,
             "agent": agent.name,
-            "phase": phase_name
+            "phase": phase_name,
         }
 
     async def _execute_collaborative_phase_work(
-        self,
-        agent_names: List[str],
-        phase: Dict[str, Any],
-        main_task: str
+        self, agent_names: List[str], phase: Dict[str, Any], main_task: str
     ) -> Dict[str, Any]:
         """Execute collaborative work where all agents work together."""
         results = {}
@@ -1043,20 +1142,22 @@ class CollaborativeSystem(System):
             "documentation": [],
             "progress_reports": [],
             "project_structure": {},
-            "files_created": []
+            "files_created": [],
         }
 
         # Extract code snippets
         for update in all_updates:
             if update.get("code_snippet"):
-                deliverables["code_snippets"].append({
-                    "agent": update.get("agent_name"),
-                    "file_path": update.get("file_path"),
-                    "code": update.get("code_snippet"),
-                    "description": update.get("message"),
-                    "language": update.get("language", "dart"),
-                    "timestamp": update.get("timestamp")
-                })
+                deliverables["code_snippets"].append(
+                    {
+                        "agent": update.get("agent_name"),
+                        "file_path": update.get("file_path"),
+                        "code": update.get("code_snippet"),
+                        "description": update.get("message"),
+                        "language": update.get("language", "dart"),
+                        "timestamp": update.get("timestamp"),
+                    }
+                )
 
         # Get shared interfaces
         board_data = self.progress_board._load_board()
@@ -1066,15 +1167,23 @@ class CollaborativeSystem(System):
         deliverables["progress_reports"] = board_data.get("progress_reports", [])
 
         # Generate project structure for Flutter app and CREATE ACTUAL FILES
-        if any("flutter" in tag for update in all_updates for tag in update.get("tags", [])):
-            deliverables["project_structure"] = self._generate_flutter_structure(deliverables)
+        if any(
+            "flutter" in tag for update in all_updates for tag in update.get("tags", [])
+        ):
+            deliverables["project_structure"] = self._generate_flutter_structure(
+                deliverables
+            )
             # Actually create the Flutter project files
-            created_files = await self._create_flutter_project_files(deliverables["code_snippets"])
+            created_files = await self._create_flutter_project_files(
+                deliverables["code_snippets"]
+            )
             deliverables["files_created"] = created_files
 
         return deliverables
 
-    async def _create_flutter_project_files(self, code_snippets: List[Dict[str, Any]]) -> List[str]:
+    async def _create_flutter_project_files(
+        self, code_snippets: List[Dict[str, Any]]
+    ) -> List[str]:
         """
         Create actual Flutter project files from the generated code snippets.
 
@@ -1121,7 +1230,7 @@ class CollaborativeSystem(System):
 
             # Write the file
             try:
-                with open(full_path, 'w', encoding='utf-8') as f:
+                with open(full_path, "w", encoding="utf-8") as f:
                     f.write(code_content)
 
                 created_files.append(str(full_path))
@@ -1133,7 +1242,7 @@ class CollaborativeSystem(System):
                     message=f"Created file: {file_path}",
                     update_type="file_created",
                     file_path=str(full_path),
-                    tags=["file_creation", "flutter"]
+                    tags=["file_creation", "flutter"],
                 )
 
             except Exception as e:
@@ -1190,7 +1299,7 @@ The agents collaborated through a centralized progress board to coordinate devel
 """
 
         try:
-            with open(project_dir / "README.md", 'w', encoding='utf-8') as f:
+            with open(project_dir / "README.md", "w", encoding="utf-8") as f:
                 f.write(readme_content)
         except Exception as e:
             logger.error(f"Error creating README.md: {e}")
@@ -1236,12 +1345,14 @@ Thumbs.db
 """
 
         try:
-            with open(project_dir / ".gitignore", 'w', encoding='utf-8') as f:
+            with open(project_dir / ".gitignore", "w", encoding="utf-8") as f:
                 f.write(gitignore_content)
         except Exception as e:
             logger.error(f"Error creating .gitignore: {e}")
 
-    def _generate_flutter_structure(self, deliverables: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_flutter_structure(
+        self, deliverables: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Generate Flutter project structure from deliverables."""
         structure = {
             "flutter_music_app/": {
@@ -1251,35 +1362,35 @@ Thumbs.db
                         "home_screen.dart": "Main music browser",
                         "player_screen.dart": "Now playing screen",
                         "playlist_screen.dart": "Playlist management",
-                        "search_screen.dart": "Search interface"
+                        "search_screen.dart": "Search interface",
                     },
                     "widgets/": {
                         "player_controls.dart": "Play/pause/skip controls",
                         "track_list_tile.dart": "Track display widget",
-                        "mini_player.dart": "Bottom mini player"
+                        "mini_player.dart": "Bottom mini player",
                     },
                     "services/": {
                         "audio_service.dart": "Audio playback logic",
                         "streaming_service.dart": "Music streaming",
-                        "offline_service.dart": "Offline playback"
+                        "offline_service.dart": "Offline playback",
                     },
                     "models/": {
                         "track.dart": "Track data model",
                         "playlist.dart": "Playlist model",
-                        "user_preferences.dart": "User settings"
+                        "user_preferences.dart": "User settings",
                     },
                     "providers/": {
                         "audio_provider.dart": "Audio state management",
                         "playlist_provider.dart": "Playlist state",
-                        "user_provider.dart": "User data state"
+                        "user_provider.dart": "User data state",
                     },
                     "utils/": {
                         "constants.dart": "App constants",
-                        "theme.dart": "Material Design 3 theme"
-                    }
+                        "theme.dart": "Material Design 3 theme",
+                    },
                 },
                 "pubspec.yaml": "Dependencies and project config",
-                "README.md": "Project documentation"
+                "README.md": "Project documentation",
             }
         }
 
@@ -1288,12 +1399,17 @@ Thumbs.db
         interface_count = len(deliverables.get("interfaces", []))
 
         structure["summary"] = {
-            "total_files": self._count_files_in_structure(structure["flutter_music_app/"]),
+            "total_files": self._count_files_in_structure(
+                structure["flutter_music_app/"]
+            ),
             "code_snippets_shared": code_count,
             "interfaces_defined": interface_count,
-            "agents_contributed": len(set(
-                snippet["agent"] for snippet in deliverables.get("code_snippets", [])
-            ))
+            "agents_contributed": len(
+                set(
+                    snippet["agent"]
+                    for snippet in deliverables.get("code_snippets", [])
+                )
+            ),
         }
 
         return structure
@@ -1308,7 +1424,9 @@ Thumbs.db
                 count += 1
         return count
 
-    async def create_flutter_project(self, project_name: str = "flutter_music_app") -> str:
+    async def create_flutter_project(
+        self, project_name: str = "flutter_music_app"
+    ) -> str:
         """
         Create and initialize a Flutter project structure.
 
@@ -1372,13 +1490,15 @@ flutter:
 """
 
         try:
-            with open(project_path / "pubspec.yaml", 'w') as f:
+            with open(project_path / "pubspec.yaml", "w") as f:
                 f.write(pubspec_content)
             logger.info("Created pubspec.yaml")
         except Exception as e:
             logger.error(f"Error creating pubspec.yaml: {e}")
 
-    async def write_code_to_files(self, progress_board_data: Dict[str, Any]) -> List[str]:
+    async def write_code_to_files(
+        self, progress_board_data: Dict[str, Any]
+    ) -> List[str]:
         """
         Write code snippets from progress board to actual Flutter files.
 
@@ -1417,7 +1537,7 @@ flutter:
             "SearchScreen screen": "lib/screens/search_screen.dart",
             "PlaylistScreen screen": "lib/screens/playlist_screen.dart",
             "Main application entry point": "lib/main.dart",
-            "Complete pubspec.yaml": "pubspec.yaml"
+            "Complete pubspec.yaml": "pubspec.yaml",
         }
 
         project_dir = self.workspace_dir / "flutter_music_app"
@@ -1426,6 +1546,7 @@ flutter:
         def _validate_and_resolve_file_path(raw_path):
             """Validate and normalise file paths, enforce extensions, and prevent unsafe writes."""
             from pathlib import Path
+
             valid_exts = {".dart", ".yaml", ".json", ".md"}
             path = Path(raw_path)
 
@@ -1450,8 +1571,8 @@ flutter:
             return full_path
 
         for update in code_updates:
-            message = update.get('message', '')
-            code_snippet = update.get('code_snippet', '')
+            message = update.get("message", "")
+            code_snippet = update.get("code_snippet", "")
 
             if not code_snippet or not message:
                 continue
@@ -1469,9 +1590,11 @@ flutter:
 
             if not file_path:
                 # Try to extract from file_path field if available
-                if update.get('file_path'):
+                if update.get("file_path"):
                     try:
-                        file_path = _validate_and_resolve_file_path(update['file_path'].replace('lib/', ''))
+                        file_path = _validate_and_resolve_file_path(
+                            update["file_path"].replace("lib/", "")
+                        )
                     except ValueError as e:
                         logger.error(str(e))
                         continue
@@ -1489,7 +1612,7 @@ flutter:
 
                 # Atomic write
                 tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
-                with open(tmp_path, 'w', encoding='utf-8') as f:
+                with open(tmp_path, "w", encoding="utf-8") as f:
                     f.write(code_snippet)
                 tmp_path.replace(file_path)
 
@@ -1502,11 +1625,8 @@ flutter:
 
         return created_files
 
-
     async def execute_flutter_development(
-        self,
-        task: str,
-        delegation_strategy: str = "collaborative"
+        self, task: str, delegation_strategy: str = "collaborative"
     ) -> Dict[str, Any]:
         """
         Execute collaborative Flutter development task.
@@ -1536,6 +1656,8 @@ flutter:
         results["created_files"] = created_files
         results["total_files_created"] = len(created_files)
 
-        logger.info(f"Flutter development completed. Created {len(created_files)} files.")
+        logger.info(
+            f"Flutter development completed. Created {len(created_files)} files."
+        )
 
         return results
