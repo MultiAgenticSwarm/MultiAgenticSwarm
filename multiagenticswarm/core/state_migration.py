@@ -559,8 +559,10 @@ def benchmark_migration_performance(
     return metrics
 
 
-# Auto-load migration scripts when module is imported
-try:
-    load_migration_scripts()
-except Exception as e:
-    logger.warning(f"Failed to auto-load migration scripts: {e}")
+    logger.warning(
+        f"Failed to auto-load migration scripts: {e}. "
+        "State migration functionality may be unavailable or incomplete. "
+        "This may prevent state upgrades or downgrades between versions. "
+        "Please check that migration scripts are present and accessible, and review the error above. "
+        "Manual intervention may be required to restore migration capabilities."
+    )
