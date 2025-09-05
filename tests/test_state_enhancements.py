@@ -25,7 +25,6 @@ from multiagenticswarm.core.state import (
     compare_versions,
     is_compatible_version,
     migrate_state,
-    register_migration,
     create_migration_backup,
     restore_from_backup,
     auto_migrate_state,
@@ -34,6 +33,8 @@ from multiagenticswarm.core.state import (
     VALID_EXECUTION_MODES,
     VALID_WORKFLOW_PATTERNS
 )
+
+from multiagenticswarm.core.state_migration import register_migration
 from multiagenticswarm.core.state_reducers import (
     merge_agent_outputs,
     aggregate_progress,
