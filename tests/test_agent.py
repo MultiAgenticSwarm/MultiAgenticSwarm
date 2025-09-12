@@ -237,8 +237,7 @@ class TestAgentNodeExecution:
 class TestBackwardCompatibility:
     """Test backward compatibility with legacy execute() method."""
     
-    @pytest.mark.asyncio
-    async def test_legacy_execute_method(self):
+    def test_legacy_execute_method(self):
         """Test that legacy execute() method still works."""
         agent = Agent(name="LegacyAgent")
         
@@ -259,7 +258,7 @@ class TestBackwardCompatibility:
         agent.__call__ = mock_call
         
         # Test legacy interface
-        result = await agent.execute("Legacy test input")
+        result = agent.execute("Legacy test input")
         
         # Verify legacy format
         assert result["agent_id"] == agent.id
@@ -269,8 +268,7 @@ class TestBackwardCompatibility:
         assert result["execution_time"] == 0.1
         assert result["success"] == True
     
-    @pytest.mark.asyncio
-    async def test_legacy_execute_with_context(self):
+    def test_legacy_execute_with_context(self):
         """Test legacy execute with context parameter."""
         agent = Agent(name="ContextAgent")
         
@@ -289,7 +287,7 @@ class TestBackwardCompatibility:
         
         agent.__call__ = mock_call
         
-        result = await agent.execute("Test", context={"key": "value"})
+        result = agent.execute("Test", context={"key": "value"})
         
         assert "Context received: value" in result["output"]
 
@@ -480,17 +478,45 @@ class TestAgentEdgeCases:
             "execution_metadata": {}
         }
         
+        # Mock subgraph that returns empty results
         with patch.object(agent, 'get_compiled_subgraph') as mock_get_subgraph:
             mock_subgraph = Mock()
-            mock_subgraph.stream.return_value = []  # Empty response
+            mock_subgraph.stream.return_value = []  # Empty stream
             mock_get_subgraph.return_value = mock_subgraph
             
             result = agent(test_state)
             
-            # Should handle gracefully
+            # Should handle empty response with error
             assert "agent_outputs" in result
-            assert "EmptyAgent" in result["agent_outputs"]
             assert result["agent_outputs"]["EmptyAgent"]["success"] == False
+            assert "error" in result["agent_outputs"]["EmptyAgent"]
+
+    def test_agent_call_with_none_state(self):
+        """Test agent.__call__ with None state."""
+        agent = Agent(name="TestAgent")
+        
+        with pytest.raises(ValueError, match="State cannot be None"):
+            agent(None)
+
+    def test_langgraph_not_available_error(self):
+        """Test behavior when LangGraph is not available."""
+        agent = Agent(name="TestAgent")
+        
+        # Mock LANGGRAPH_AVAILABLE as False
+        with patch('multiagenticswarm.core.agent.LANGGRAPH_AVAILABLE', False):
+            with pytest.raises(ImportError, match="LangGraph not available"):
+                agent._create_agent_subgraph()
+            
+            with pytest.raises(ImportError, match="LangGraph not available"):
+                state = {
+                    "messages": [HumanMessage(content="Test")],
+                    "agent_outputs": {},
+                    "subgraph_states": {},
+                    "parent_graph_id": "test-123",
+                    "current_agent": "TestAgent",
+                    "execution_metadata": {}
+                }
+                agent(state)
 
 
 class TestAgentStateSchema:

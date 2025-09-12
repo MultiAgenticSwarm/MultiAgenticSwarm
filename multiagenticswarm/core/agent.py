@@ -1,19 +1,34 @@
-"""
-Core agent implementation with LangGraph subgraph architecture.
-"""
+"""Core agent implementation with LangGraph subgraph architecture."""
 
 import uuid
 import time
-from typing import Any, Dict, List, Optional, Union, TypedDict, Annotated
-import json
+from typing import Any, Dict, List, Optional, TypedDict, Annotated, TYPE_CHECKING
 import operator
-from datetime import datetime
 
-# LangGraph imports
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import create_react_agent, ToolNode
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_core.tools import tool
+try:
+    from langgraph.graph import StateGraph, END
+    from langgraph.prebuilt import create_react_agent, ToolNode
+    from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+    from langchain_core.tools import tool
+    LANGGRAPH_AVAILABLE = True
+except ImportError:
+    LANGGRAPH_AVAILABLE = False
+    # Define fallback classes for type hints
+    StateGraph = Any
+    END = "END"
+    BaseMessage = Any
+    HumanMessage = Any
+    AIMessage = Any
+    ToolMessage = Any
+    
+    def create_react_agent(*args, **kwargs):
+        raise ImportError("LangGraph not available. Please install langgraph package.")
+    
+    def ToolNode(*args, **kwargs):
+        raise ImportError("LangGraph not available. Please install langgraph package.")
+    
+    def tool(*args, **kwargs):
+        raise ImportError("LangChain not available. Please install langchain-core package.")
 
 try:
     from pydantic import BaseModel, Field
@@ -24,6 +39,8 @@ except ImportError:
 
     # Fallback base class
     class BaseModel:
+        """Fallback BaseModel when Pydantic is not available."""
+
         def __init__(self, **kwargs):
             for key, value in kwargs.items():
                 setattr(self, key, value)
@@ -32,6 +49,7 @@ except ImportError:
             return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
 
     def Field(**kwargs):
+        """Fallback Field function when Pydantic is not available."""
         return kwargs.get("default", None)
 
 
@@ -42,6 +60,9 @@ logger = get_logger(__name__)
 
 
 # State Schemas
+if TYPE_CHECKING:
+    from langgraph.graph import StateGraph
+
 class AgentSubgraphState(TypedDict):
     """State for individual agent subgraph execution."""
 
@@ -58,7 +79,7 @@ class AgentState(TypedDict):
 
     messages: Annotated[List[BaseMessage], operator.add]
     agent_outputs: Dict[str, Any]
-    subgraph_states: Dict[str, AgentSubgraphState]
+    subgraph_states: Dict[str, "AgentSubgraphState"]
     parent_graph_id: str
     current_agent: str
     execution_metadata: Dict[str, Any]
@@ -129,7 +150,7 @@ class Agent:
         self.tools = tools or []
 
         # LangGraph components
-        self._compiled_subgraph: Optional[StateGraph] = None
+        self._compiled_subgraph: Optional["StateGraph"] = None
         self._llm_provider: Optional[LLMProvider] = None
 
         logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model}")
@@ -143,16 +164,17 @@ class Agent:
             )
         return self._llm_provider
 
-    def _create_agent_subgraph(self) -> StateGraph:
+    def _create_agent_subgraph(self) -> "StateGraph":
         """
         Create and compile the agent's internal subgraph using LangGraph's create_react_agent.
 
         Returns:
             Compiled StateGraph representing this agent's execution logic
         """
-        logger.debug(f"Compiling subgraph for agent '{self.name}'")
+        if not LANGGRAPH_AVAILABLE:
+            raise ImportError("LangGraph not available. Please install langgraph package.")
 
-        # Get LLM provider for this agent
+        logger.debug(f"Compiling subgraph for agent '{self.name}'")        # Get LLM provider for this agent
         llm = self.llm_provider
 
         # Convert tools to LangChain format if needed
@@ -199,7 +221,7 @@ class Agent:
 
         return langchain_tools
 
-    def get_compiled_subgraph(self) -> StateGraph:
+    def get_compiled_subgraph(self) -> "StateGraph":
         """
         Get or create the compiled subgraph for this agent.
 
@@ -223,14 +245,19 @@ class Agent:
         Returns:
             Dictionary of state updates for the parent graph
         """
+        if not LANGGRAPH_AVAILABLE:
+            raise ImportError("LangGraph not available. Please install langgraph package.")
+            
+        if not state:
+            raise ValueError("State cannot be None")
+            
         start_time = time.time()
 
-        logger.log_agent_action(
-            agent_name=self.name,
-            action="subgraph_execute",
-            input_data=state.get("messages", []),
-            context={"parent_graph_id": state.get("parent_graph_id")},
-        )
+        try:
+            logger.info(f"Agent '{self.name}' starting subgraph execution")
+        except AttributeError:
+            # Fallback if custom logger methods don't exist
+            logger.info(f"Agent '{self.name}' starting subgraph execution")
 
         try:
             # Extract input from parent state
@@ -279,15 +306,10 @@ class Agent:
 
             execution_time = time.time() - start_time
 
-            logger.log_agent_action(
-                agent_name=self.name,
-                action="subgraph_complete",
-                output_data=final_answer,
-                context={
-                    "execution_time": execution_time,
-                    "parent_graph_id": parent_graph_id,
-                },
-            )
+            try:
+                logger.info(f"Agent '{self.name}' completed subgraph execution in {execution_time:.2f}s")
+            except AttributeError:
+                logger.info(f"Agent '{self.name}' completed subgraph execution in {execution_time:.2f}s")
 
             # Return state updates for parent graph
             return {
@@ -300,11 +322,10 @@ class Agent:
         except Exception as e:
             execution_time = time.time() - start_time
 
-            logger.log_agent_action(
-                agent_name=self.name,
-                action="subgraph_error",
-                context={"error": str(e), "execution_time": execution_time},
-            )
+            try:
+                logger.error(f"Agent '{self.name}' subgraph execution failed: {str(e)}")
+            except AttributeError:
+                logger.error(f"Agent '{self.name}' subgraph execution failed: {str(e)}")
 
             # Return error state update
             updated_agent_outputs = state.get("agent_outputs", {}).copy()
@@ -321,7 +342,7 @@ class Agent:
             }
 
     # Backward compatibility method
-    async def execute(
+    def execute(
         self, input_text: str, context: Optional[Dict[str, Any]] = None, **kwargs
     ) -> Dict[str, Any]:
         """
@@ -415,4 +436,5 @@ class Agent:
         return cls.from_dict(config.model_dump())
 
     def __repr__(self) -> str:
+        """Return string representation of the agent."""
         return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}', subgraph=True)"
