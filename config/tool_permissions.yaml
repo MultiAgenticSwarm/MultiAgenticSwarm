@@ -1,0 +1,177 @@
+# Enhanced Tool Permission Configuration
+# Compatible with existing ToolNodeManager system
+# This file defines which agents can use which tools and under what conditions
+# Change this file to modify permissions without touching the code
+
+# Global Settings
+global_settings:
+  default_tool_access: true # Allow access to tools not explicitly listed
+  enable_workflow_restrictions: true # Enable workflow phase-based restrictions
+  enable_resource_quotas: true # Enable resource and quota checking
+  log_permission_decisions: true # Log all permission allow/deny decisions
+
+# Role Definitions
+roles:
+  basic_user:
+    description: "Basic user with limited access"
+    allowed_tools:
+      - calculator
+      - logger
+      - text_processor
+
+  data_analyst:
+    description: "Data analysis specialist"
+    allowed_tools:
+      - calculator
+      - logger
+      - text_processor
+      - data_reader
+      - chart_generator
+      - statistics_tool
+
+  developer:
+    description: "Software developer"
+    allowed_tools:
+      - calculator
+      - logger
+      - text_processor
+      - file_writer
+      - code_executor
+      - git_manager
+
+  admin:
+    description: "System administrator"
+    allowed_tools:
+      - calculator
+      - logger
+      - text_processor
+      - file_writer
+      - code_executor
+      - git_manager
+      - data_reader
+      - chart_generator
+      - statistics_tool
+      - system_monitor
+      - database_manager
+
+# Agent Tool Permissions
+agent_permissions:
+  DataAnalyst:
+    description: "Agent specialized in data analysis and processing"
+    role: data_analyst
+    allowed_tools:
+      - advanced_analytics # Additional tool beyond role
+    denied_tools:
+      - system_monitor # Explicitly deny even if role allows
+
+  CodeWriter:
+    description: "Agent specialized in writing and managing code"
+    role: developer
+    allowed_tools: [] # Only role-based permissions
+    denied_tools:
+      - database_manager # Developers can't manage database
+
+  SysAdmin:
+    description: "Agent with administrative privileges"
+    role: admin
+    allowed_tools: [] # Full admin access
+    denied_tools: []
+
+  Assistant:
+    description: "General purpose assistant with basic tools"
+    role: basic_user
+    allowed_tools: []
+    denied_tools:
+      - file_writer
+      - database_writer
+      - system_monitor
+
+# Tool Scope Definitions
+tool_scopes:
+  # Global tools - available to all agents by default
+  logger:
+    scope: GLOBAL
+    description: "Logging functionality for all agents"
+
+  calculator:
+    scope: GLOBAL
+    description: "Basic calculator functionality"
+
+  memory_store:
+    scope: GLOBAL
+    description: "Shared memory storage"
+
+  # Shared tools - available to specific agents
+  database_reader:
+    scope: SHARED
+    shared_agents:
+      - DataAnalyst
+      - SysAdmin
+    description: "Database read access"
+
+  file_reader:
+    scope: SHARED
+    shared_agents:
+      - CodeWriter
+      - SysAdmin
+    description: "File system read access"
+
+  # Local tools - available to one agent only
+  database_writer:
+    scope: LOCAL
+    local_agent: SysAdmin
+    description: "Database write access - admin only"
+
+  system_monitor:
+    scope: LOCAL
+    local_agent: SysAdmin
+    description: "System monitoring tools"
+
+# Workflow Phase Restrictions
+workflow_restrictions:
+  planning:
+    description: "Initial planning phase - limited tool access"
+    restricted_tools:
+      - file_writer # No file writing during planning
+      - database_writer # No database changes during planning
+      - code_executor # No code execution during planning
+
+  development:
+    description: "Active development phase"
+    restricted_tools:
+      - database_writer # Limit database changes during development
+
+  testing:
+    description: "Testing phase - read-only for data sources"
+    restricted_tools:
+      - database_writer
+
+  production:
+    description: "Production deployment - strict controls"
+    restricted_tools:
+      - code_executor # No code execution in production
+    allowed_agents: # Only these agents can use tools in production
+      - SysAdmin
+
+# Resource Quotas and Limits
+resource_limits:
+  api_calls_per_hour: 1000
+  max_file_size_mb: 50
+  max_files_per_operation: 100
+  max_db_queries_per_minute: 50
+  max_db_records_per_query: 1000
+  max_memory_storage_mb: 100
+
+# Tool Usage Quotas
+tool_usage_quotas:
+  expensive_api:
+    quota_per_hour: 10
+    description: "Expensive external API calls"
+
+  database_writer:
+    quota_per_day: 50
+    description: "Database write operations"
+
+  code_executor:
+    quota_per_session: 20
+    description: "Code execution attempts"
