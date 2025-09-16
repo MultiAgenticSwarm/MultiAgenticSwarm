@@ -1,5 +1,5 @@
 
-# TODO: improve the registry system
+# TODO: improve the registry system: compatible with the agent state schema
 class ToolRegistry:
     def __init__(self):
         self.registry = {}

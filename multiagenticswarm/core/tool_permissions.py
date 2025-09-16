@@ -1,59 +1,61 @@
 import time
 
 
-# TODO: Make the permission system more robust
 class ToolPermissions:
     def __init__(self):
-        # {agent_id: {tool_id: {"status": "ALLOWED"/"DENIED"/"CONDITIONAL",
+        # {agent_id: {tool_id: {"status": str,
         #                       "quota": {"per_day": int, "calls": int, "last_reset": float}}}}
         self.permissions = {}
         self.logs = []
 
-
     def set_permission(self, agent_id, tool_id, status="ALLOWED", quota=None):
+        if isinstance(quota, int):
+            quota = {"per_day": quota}
+
         self.permissions.setdefault(agent_id, {})[tool_id] = {
             "status": status,
-            "quota": {"per_day": quota, "calls": 0, "last_reset": time.time()} if quota else None
+            "quota": {
+                "per_day": quota.get("per_day"),
+                "calls": 0,
+                "last_reset": time.time(),
+            }
+            if quota
+            else None,
         }
 
-
-    def _check_quota(self, agent_id, tool_id):
-        record = self.permissions.get(agent_id, {}).get(tool_id)
-        if not record or not record.get("quota"):
-            return True, None
-
-        q = record["quota"]
-        now = time.time()
-
-        # Reset quota every 24h
-        if now - q["last_reset"] > 86400:
-            q["calls"] = 0
-            q["last_reset"] = now
-
-        if q["per_day"] is not None and q["calls"] >= q["per_day"]:
-            return False, "Daily quota exceeded"
-
-        q["calls"] += 1
-        return True, None
-
-
     def check_permission(self, agent_id, tool_id, context=None):
+        """Check if agent has permission and within quota for tool usage"""
         record = self.permissions.get(agent_id, {}).get(tool_id)
         if not record:
             return False, "No permission entry"
 
         status = record["status"]
 
-        if status == "ALLOWED":
-            return True, None
-        elif status == "DENIED":
+        # === Step 1: Status-based check ===
+        if status == "DENIED":
             return False, "Permission denied"
-        elif status == "CONDITIONAL":
-            if context and context.get("approved", False):
-                return True, None
-            return False, "Condition not satisfied"
-        return False, "Unknown status"
 
+        if status == "CONDITIONAL":
+            if not (context and context.get("approved", False)):
+                return False, "Condition not satisfied"
+
+        # === Step 2: Quota-based check ===
+        quota = record.get("quota")
+        if quota:
+            now = time.time()
+
+            # Reset quota every 24h
+            if now - quota["last_reset"] > 86400:
+                quota["calls"] = 0
+                quota["last_reset"] = now
+
+            if quota["per_day"] is not None and quota["calls"] >= quota["per_day"]:
+                return False, "Daily quota exceeded"
+
+            quota["calls"] += 1
+
+        # Passed all checks
+        return True, None
 
     def log(self, agent_id, tool_id, action, outcome, details=None):
         entry = {
@@ -62,10 +64,9 @@ class ToolPermissions:
             "action": action,
             "outcome": outcome,
             "details": details,
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
         self.logs.append(entry)
-
 
     def get_logs(self):
         return self.logs
