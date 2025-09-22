@@ -202,7 +202,7 @@ class TestToolRegistry:
     def test_discover_tool_respects_top_k_limit(self):
         """Test that discovery respects the top_k parameter"""
         for i in range(5):
-            func = lambda: i
+            func = lambda i=i: i
             self.registry.register_tool(f"tool{i}", f"Tool {i}", f"Tool number {i}", "test", func)
 
         results = self.registry.discover_tool(top_k=3)
