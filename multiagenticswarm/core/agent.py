@@ -193,7 +193,7 @@ class Agent:
             subgraph_builder.add_node("tools", ToolNode(langchain_tools))
             subgraph_builder.add_conditional_edges(
                 "agent",
-                lambda state: "tools" if state["messages"][-1].tool_calls else END,
+                lambda state: "tools" if state["messages"] and getattr(state["messages"][-1], "tool_calls", None) else END,
             )
             subgraph_builder.add_edge("tools", "agent")
 
