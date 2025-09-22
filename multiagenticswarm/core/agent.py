@@ -278,14 +278,20 @@ class Agent:
 
             # Execute subgraph with streaming support
             final_subgraph_state = None
+            last_chunk = None
             for chunk in subgraph.stream(
                 subgraph_input, config={"recursion_limit": self.max_iterations}
             ):
                 final_subgraph_state = chunk
+                last_chunk = chunk
                 # Here we could emit partial updates if needed
 
             if not final_subgraph_state:
-                raise RuntimeError(f"Agent {self.name} subgraph execution failed")
+                raise RuntimeError(
+                    f"Agent {self.name} subgraph execution failed.\n"
+                    f"Subgraph input: {repr(subgraph_input)}\n"
+                    f"Last chunk: {repr(last_chunk)}"
+                )
 
             # Extract results from final subgraph state
             last_node_key = list(final_subgraph_state.keys())[0]
