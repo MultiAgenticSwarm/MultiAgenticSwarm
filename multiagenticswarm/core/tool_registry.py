@@ -79,8 +79,9 @@ class ToolRegistry:
 
             # Match query (name + description)
             if query:
-                text = tool["name"] + " " + tool["description"]
-                matches = get_close_matches(query, [text], n=1, cutoff=0.3)
+                # Tokenize name and description into words
+                words = tool["name"].split() + tool["description"].split()
+                matches = get_close_matches(query, words, n=1, cutoff=0.7)
                 if matches:
                     results.append((tool_id, tool))
             else:
