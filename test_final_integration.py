@@ -27,7 +27,7 @@ class MockToolNodeManager:
         # Store function for execution
         self.tools[tool_id] = func
         
-        print(f"✓ Registered tool: {name} ({tool_id})")
+        print(f"Registered tool: {name} ({tool_id})")
     
     def execute_tool(self, agent_id, tool_id, context=None, **kwargs):
         """Execute a tool with permission checking (your colleague's logic + our enhancement)."""
@@ -35,7 +35,7 @@ class MockToolNodeManager:
         allowed, reason = self.permissions.check_permission(agent_id, tool_id, context)
         
         if not allowed:
-            print(f"❌ {agent_id} denied access to {tool_id}: {reason}")
+            print(f"{agent_id} denied access to {tool_id}: {reason}")
             return {"error": f"Permission denied: {reason}"}
         
         # Execute the tool (your colleague's existing logic)
@@ -44,7 +44,7 @@ class MockToolNodeManager:
         
         try:
             result = self.tools[tool_id](**kwargs)
-            print(f"✅ {agent_id} executed {tool_id} successfully")
+            print(f"{agent_id} executed {tool_id} successfully")
             
             # Log the execution
             self.permissions.log(agent_id, tool_id, "EXECUTE", "SUCCESS", result)
@@ -128,11 +128,11 @@ def test_integration():
     for log in logs[-5:]:  # Show last 5 logs
         print(f"  {log['agent']} -> {log['tool']}: {log['outcome']}")
     
-    print("\n🎉 Integration Test Complete!")
-    print("✅ Enhanced permissions work seamlessly with existing ToolNodeManager")
-    print("🔧 Your colleague can use the enhanced system without changing their code")
-    print("📝 Config-driven permissions are now available")
-    print("⚡ Workflow-based restrictions are enforced")
+    print("\nIntegration Test Complete!")
+    print("Enhanced permissions work seamlessly with existing ToolNodeManager")
+    print("Your colleague can use the enhanced system without changing their code")
+    print("Config-driven permissions are now available")
+    print("Workflow-based restrictions are enforced")
 
 if __name__ == "__main__":
     test_integration()

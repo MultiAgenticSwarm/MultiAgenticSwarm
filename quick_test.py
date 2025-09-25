@@ -9,13 +9,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from multiagenticswarm.core.tool_permissions import ToolPermissions
 
 def interactive_test():
-    print("🧪 Interactive Permission Test")
+    print("Interactive Permission Test")
     print("=" * 40)
     
     # Initialize permissions
     permissions = ToolPermissions()
     
-    print(f"✅ Loaded config with roles: {list(permissions.roles.keys())}")
+    print(f"Loaded config with roles: {list(permissions.roles.keys())}")
     print()
     
     # Test different scenarios - MODIFY THESE AS NEEDED:
@@ -32,12 +32,12 @@ def interactive_test():
     
     for agent, tool, context, description in test_cases:
         allowed, reason = permissions.check_permission(agent, tool, context)
-        status = "✅ ALLOWED" if allowed else "❌ DENIED"
+        status = "ALLOWED" if allowed else "DENIED"
         reason_text = f" - {reason}" if reason else ""
         print(f"{status}: {description}{reason_text}")
     
     print("\n" + "=" * 40)
-    print("🎯 Modify the test_cases list above to test your own scenarios!")
+    print("Modify the test_cases list above to test your own scenarios!")
 
 if __name__ == "__main__":
     interactive_test()

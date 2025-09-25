@@ -11,7 +11,7 @@ from multiagenticswarm.core.tool_permissions import ToolPermissions
 # Initialize once
 permissions = ToolPermissions()
 
-print("🔍 Quick Permission Checks:")
+print("Quick Permission Checks:")
 print("-" * 30)
 
 # Test basic permissions
@@ -34,4 +34,4 @@ print(f"CodeWriter + file_writer (development): {result}")
 result = permissions.check_permission("DataAnalyst", "system_monitor")
 print(f"DataAnalyst + system_monitor: {result}")
 
-print("\n✅ All tests complete!")
+print("\nAll tests complete!")

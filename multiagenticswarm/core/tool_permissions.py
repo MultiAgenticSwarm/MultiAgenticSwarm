@@ -1,10 +1,21 @@
-import time
-import yaml
+import logging
 import os
-from typing import Dict, List, Any, Optional
+import time
 from enum import Enum
 from pathlib import Path
+from typing import Dict, List, Any, Optional
 
+import yaml
+
+logger = logging.getLogger(__name__)
+
+# Constants
+SECONDS_PER_DAY = 86400
+DEFAULT_CONFIG_PATHS = [
+    "config/tool_permissions.yaml",
+    "config/permissions.yaml", 
+    "../config/tool_permissions.yaml"
+]
 
 class PermissionStatus(Enum):
     """Permission status types."""
@@ -16,55 +27,49 @@ class PermissionStatus(Enum):
 
 
 class ToolPermissions:
-    def __init__(self, config_path: Optional[str] = None):
-        # {agent_id: {tool_id: {"status": str,
-        #                       "quota": {"per_day": int, "calls": int, "last_reset": float}}}}
-        self.permissions = {}
-        self.logs = []
-        self.roles = {}  # Role-based permissions
-        self.config_path = config_path or self._find_config_file()
-        self.config_data = {}
+    def __init__(self, config_path: Optional[str] = None) -> None:
+        self.permissions: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self.logs: List[Dict[str, Any]] = []
+        self.roles: Dict[str, Dict[str, Any]] = {}
+        self.config_path: Optional[str] = config_path or self._find_config_file()
+        self.config_data: Dict[str, Any] = {}
         
-        # Load configuration if available
         self._load_config()
     
     def _find_config_file(self) -> Optional[str]:
         """Find permission config file in standard locations."""
-        possible_paths = [
-            "config/tool_permissions.yaml",
-            "config/permissions.yaml",
-            "../config/tool_permissions.yaml"
-        ]
-        
-        for path in possible_paths:
-            if os.path.exists(path):
+        for path in DEFAULT_CONFIG_PATHS:
+            if Path(path).exists():
                 return path
         return None
     
-    def _load_config(self):
+    def _load_config(self) -> None:
         """Load permissions from config file."""
-        if not self.config_path or not os.path.exists(self.config_path):
+        if not self.config_path or not Path(self.config_path).exists():
             return
             
         try:
-            with open(self.config_path, 'r') as file:
+            with open(self.config_path, 'r', encoding='utf-8') as file:
                 self.config_data = yaml.safe_load(file) or {}
                 
-            # Load role definitions
             self.roles = self.config_data.get("roles", {})
-            
-            # Apply config-based permissions
             self._apply_config_permissions()
             
+        except FileNotFoundError:
+            logger.warning("Permission config file not found: %s", self.config_path)
+        except yaml.YAMLError as e:
+            logger.error("Invalid YAML in permission config file: %s", e)
+        except PermissionError:
+            logger.error("Permission denied reading config file: %s", self.config_path)
         except Exception as e:
-            print(f"Warning: Could not load permission config: {e}")
+            logger.error("Unexpected error loading permission config: %s", e)
+            raise
     
-    def _apply_config_permissions(self):
+    def _apply_config_permissions(self) -> None:
         """Apply permissions from config file."""
         agent_permissions = self.config_data.get("agent_permissions", {})
         
         for agent_id, agent_config in agent_permissions.items():
-            # Apply direct tool permissions
             allowed_tools = agent_config.get("allowed_tools", [])
             denied_tools = agent_config.get("denied_tools", [])
             
@@ -74,7 +79,6 @@ class ToolPermissions:
             for tool_id in denied_tools:
                 self.set_permission(agent_id, tool_id, PermissionStatus.DENIED.value)
             
-            # Apply role-based permissions
             role = agent_config.get("role")
             if role and role in self.roles:
                 role_tools = self.roles[role].get("allowed_tools", [])
@@ -96,7 +100,7 @@ class ToolPermissions:
             else None,
         }
 
-    def check_permission(self, agent_id, tool_id, context=None):
+    def check_permission(self, agent_id: str, tool_id: str, context: Optional[Dict[str, Any]] = None) -> tuple[bool, str]:
         """
         Enhanced permission checking with multiple strategies.
         
@@ -201,8 +205,7 @@ class ToolPermissions:
         """Check quota limits."""
         now = time.time()
         
-        # Reset quota every 24h
-        if now - quota["last_reset"] > 86400:
+        if now - quota["last_reset"] > SECONDS_PER_DAY:
             quota["calls"] = 0
             quota["last_reset"] = now
 

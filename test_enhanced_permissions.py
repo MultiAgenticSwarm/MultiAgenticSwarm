@@ -89,9 +89,9 @@ def test_enhanced_permissions():
     for log in recent_logs:
         print(f"Log: {log['agent']} -> {log['tool']} ({log['outcome']})")
     
-    print("\n✅ Enhanced permission system working correctly!")
-    print("📝 Your colleague can use ToolNodeManager with the enhanced ToolPermissions class")
-    print("🔧 The existing API is fully backward compatible")
+    print("\nEnhanced permission system working correctly!")
+    print("Your colleague can use ToolNodeManager with the enhanced ToolPermissions class")
+    print("The existing API is fully backward compatible")
 
 if __name__ == "__main__":
     test_enhanced_permissions()

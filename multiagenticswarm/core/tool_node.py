@@ -1,47 +1,52 @@
+import inspect
+from typing import Annotated, Optional, Any, Dict, Callable
+
+import makefun
 from langchain_core.tools import tool, InjectedToolArg
 from langgraph.prebuilt import ToolNode, InjectedState
-import inspect
-import makefun
-from typing import Annotated, Optional
 
 from .tool_registry import ToolRegistry
 from .tool_permissions import ToolPermissions
-
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class ToolNodeManager:
-    def __init__(self, permissions: ToolPermissions, registry: ToolRegistry):
+    def __init__(self, permissions: ToolPermissions, registry: ToolRegistry) -> None:
         self.registry = registry
         self.permissions = permissions
-        self.tools = {}
+        self.tools: Dict[str, Any] = {}
 
+    def register_tool(
+        self, 
+        tool_id: str, 
+        name: str, 
+        description: str, 
+        category: str, 
+        func: Callable,
+        schema: Optional[Dict[str, Any]] = None, 
+        output_schema: Optional[Dict[str, Any]] = None, 
+        metadata: Optional[Dict[str, Any]] = None,
+        default_permission: Optional[str] = None, 
+        quota: Optional[Dict[str, Any]] = None
+    ) -> None:
 
-    def register_tool(self, tool_id, name, description, category, func,
-                      schema=None, output_schema=None, metadata=None,
-                      default_permission=None, quota=None):
-
-        # Register Tool
         self.registry.register_tool(tool_id, name, description, category, func,
                                     schema, output_schema, metadata)
-        # Set Tool Permissions
         if default_permission:
             self.permissions.set_permission("default", tool_id, status=default_permission, quota=quota)
 
-        # Grab function signature, docstring and name (for lambdas)
         sig = inspect.signature(func)
         doc = func.__doc__ or description or f"Tool {name}"
         func_name = func.__name__ if func.__name__ not in ("<lambda>", "") else name
 
-        # Build a wrapper with the same signature as the passed function
         # TODO: the state is not being injected into the function, also make the registry etc. compatible with the
         #  State schema
         @makefun.with_signature(sig, func_name=func_name)
         def wrapped(*args, currState: Annotated[dict, InjectedState] = None, **kwargs):
 
-            print("State received: ", currState)
+            logger.debug('State received: %s', currState)
 
             agent_id = kwargs.pop("agent_id", "default")  # optional agent context
             context = kwargs.pop("context", None)
@@ -59,16 +64,14 @@ class ToolNodeManager:
                 self.permissions.log(agent_id, tool_id, "EXECUTE", "ERROR", str(e))
                 return {"error": str(e)}
 
-        # Apply tool decorator
         wrapped = tool(description=doc)(wrapped)
         wrapped.__doc__ = doc
 
         self.tools[tool_id] = wrapped
 
 
-    def get_tool_node(self):
+    def get_tool_node(self) -> ToolNode:
         return ToolNode(self.tools.values())
 
-
-    def get_tools(self):
+    def get_tools(self) -> Any:
         return self.tools.values()
