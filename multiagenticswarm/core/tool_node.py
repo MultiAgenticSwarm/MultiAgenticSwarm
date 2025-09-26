@@ -19,6 +19,7 @@ class ToolNodeManager:
     - Maintains a collection of tool wrappers compatible with LangChain/Graph
     - Provides a single ToolNode for centralized execution
     """
+
     def __init__(self, permissions: ToolPermissions, registry: ToolRegistry):
         self.registry = registry
         self.permissions = permissions
@@ -68,7 +69,7 @@ class ToolNodeManager:
                 extra={"mas_context": {"state_keys": state_keys}}
             )
 
-            # Preserve original behavior: agent id comes from injected state
+            # agent id comes from injected state
             agent_id = currState.get("current_agent", "default") if isinstance(currState, dict) else "default"
             context = kwargs.pop("context", None)
 

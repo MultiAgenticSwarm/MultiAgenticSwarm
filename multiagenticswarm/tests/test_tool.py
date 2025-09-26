@@ -1,12 +1,8 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import Annotated, Optional
+from unittest.mock import Mock, patch
+from typing import Annotated
 import inspect
 
-from langchain_core.tools import tool
-from langgraph.prebuilt import ToolNode, InjectedState
-
-# Assuming these are your imports - adjust paths as needed
 from multiagenticswarm.core.tool_node import ToolNodeManager
 from multiagenticswarm.core.tool_registry import ToolRegistry
 from multiagenticswarm.core.tool_permissions import ToolPermissions
@@ -220,7 +216,7 @@ class TestToolRegistry:
         self.registry.register_tool("tool1", "Tool 1", "desc1", "cat1", func1)
         self.registry.register_tool("tool2", "Tool 2", "desc2", "cat2", func2)
 
-        all_tools = self.registry.list_tools()
+        all_tools = self.registry.get_tools_registry_list()
 
         assert len(all_tools) == 2
         assert "tool1" in all_tools

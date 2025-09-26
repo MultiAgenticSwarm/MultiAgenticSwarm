@@ -13,6 +13,7 @@ class ToolRegistry:
     - Provide discovery via fuzzy matching and optional category filtering
     - Expose retrieval helpers for other components
     """
+
     def __init__(self):
         self.registry = {}
         logger.debug("Initialized ToolRegistry with empty registry")
@@ -101,7 +102,6 @@ class ToolRegistry:
         )
         return final
 
-
-    def list_tools(self):
+    def get_tools_registry_list(self):
         logger.debug(f"Listing all tools. Count={len(self.registry)}")
         return self.registry
