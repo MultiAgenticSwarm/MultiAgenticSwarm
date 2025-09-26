@@ -12,22 +12,47 @@ global_settings:
 
 # Role Definitions
 roles:
-  basic_user:
-    description: "Basic user with limited access"
+  basic_agent:
+    description: "Basic agent with limited access"
     allowed_tools:
-      - calculator
-      - logger
-      - text_processor
+      - EmailSender
+      - SlackNotifier
+      - FileManager
 
   data_analyst:
     description: "Data analysis specialist"
     allowed_tools:
-      - calculator
-      - logger
-      - text_processor
-      - data_reader
-      - chart_generator
-      - statistics_tool
+      - DataAPIFetcher
+      - DatabaseConnector
+      - DataProcessor
+      - EmailSender
+      - SlackNotifier
+      - FileManager
+
+  report_generator:
+    description: "Report creation specialist"
+    allowed_tools:
+      - DataProcessor
+      - DocumentGenerator
+      - EmailSender
+      - SlackNotifier
+      - FileManager
+
+  action_executor:
+    description: "Business action execution specialist"
+    allowed_tools:
+      - DataProcessor
+      - DocumentGenerator
+      - EmailSender
+      - SlackNotifier
+      - FileManager
+
+  notification_agent:
+    description: "Notification and alert specialist"
+    allowed_tools:
+      - EmailSender
+      - SlackNotifier
+      - FileManager
 
   developer:
     description: "Software developer"
@@ -40,19 +65,15 @@ roles:
       - git_manager
 
   admin:
-    description: "System administrator"
+    description: "Full system administrator"
     allowed_tools:
-      - calculator
-      - logger
-      - text_processor
-      - file_writer
-      - code_executor
-      - git_manager
-      - data_reader
-      - chart_generator
-      - statistics_tool
-      - system_monitor
-      - database_manager
+      - DataAPIFetcher
+      - DatabaseConnector
+      - DataProcessor
+      - DocumentGenerator
+      - EmailSender
+      - SlackNotifier
+      - FileManager
 
 # Agent Tool Permissions
 agent_permissions:
@@ -60,98 +81,105 @@ agent_permissions:
     description: "Agent specialized in data analysis and processing"
     role: data_analyst
     allowed_tools:
-      - advanced_analytics # Additional tool beyond role
+      - DatabaseConnector # Additional database access
     denied_tools:
-      - system_monitor # Explicitly deny even if role allows
+      - DocumentGenerator # Cannot generate documents directly
 
-  CodeWriter:
-    description: "Agent specialized in writing and managing code"
-    role: developer
+  ActionExecutor:
+    description: "Agent specialized in executing business actions"
+    role: action_executor
     allowed_tools: [] # Only role-based permissions
     denied_tools:
-      - database_manager # Developers can't manage database
+      - DataAPIFetcher # Cannot fetch raw data directly
+      - DatabaseConnector # Cannot access database directly
 
-  SysAdmin:
-    description: "Agent with administrative privileges"
-    role: admin
-    allowed_tools: [] # Full admin access
-    denied_tools: []
-
-  Assistant:
-    description: "General purpose assistant with basic tools"
-    role: basic_user
-    allowed_tools: []
+  ReportGenerator:
+    description: "Agent specialized in creating reports and documents"
+    role: report_generator
+    allowed_tools: [] # Role permissions are sufficient
     denied_tools:
-      - file_writer
-      - database_writer
-      - system_monitor
+      - DataAPIFetcher # Cannot fetch raw data directly
+      - DatabaseConnector # Cannot access database directly
+
+  NotificationAgent:
+    description: "Agent specialized in notifications and alerts"
+    role: notification_agent
+    allowed_tools: [] # Role permissions are sufficient
+    denied_tools:
+      - DataAPIFetcher # Cannot fetch data
+      - DatabaseConnector # Cannot access database
+      - DataProcessor # Cannot process data
+      - DocumentGenerator # Cannot generate documents
 
 # Tool Scope Definitions
 tool_scopes:
   # Global tools - available to all agents by default
-  logger:
+  EmailSender:
     scope: GLOBAL
-    description: "Logging functionality for all agents"
+    description: "Email sending functionality for all agents"
 
-  calculator:
+  SlackNotifier:
     scope: GLOBAL
-    description: "Basic calculator functionality"
+    description: "Slack notification functionality for all agents"
 
-  memory_store:
+  FileManager:
     scope: GLOBAL
-    description: "Shared memory storage"
+    description: "File management operations for all agents"
 
   # Shared tools - available to specific agents
-  database_reader:
+  DataProcessor:
     scope: SHARED
     shared_agents:
       - DataAnalyst
-      - SysAdmin
-    description: "Database read access"
+      - ActionExecutor
+      - ReportGenerator
+    description: "Data processing and transformation"
 
-  file_reader:
+  DocumentGenerator:
     scope: SHARED
     shared_agents:
-      - CodeWriter
-      - SysAdmin
-    description: "File system read access"
+      - ReportGenerator
+      - ActionExecutor
+    description: "Document generation and formatting"
 
   # Local tools - available to one agent only
-  database_writer:
+  DataAPIFetcher:
     scope: LOCAL
-    local_agent: SysAdmin
-    description: "Database write access - admin only"
+    local_agent: DataAnalyst
+    description: "API data fetching - analyst only"
 
-  system_monitor:
+  DatabaseConnector:
     scope: LOCAL
-    local_agent: SysAdmin
-    description: "System monitoring tools"
+    local_agent: DataAnalyst
+    description: "Database connectivity - analyst only"
 
 # Workflow Phase Restrictions
 workflow_restrictions:
   planning:
     description: "Initial planning phase - limited tool access"
     restricted_tools:
-      - file_writer # No file writing during planning
-      - database_writer # No database changes during planning
-      - code_executor # No code execution during planning
+      - DatabaseConnector # No database access during planning
+      - DataAPIFetcher # No external data fetching during planning
+      - EmailSender # No email sending during planning
 
   development:
     description: "Active development phase"
     restricted_tools:
-      - database_writer # Limit database changes during development
+      - EmailSender # Limit external communications during development
 
   testing:
     description: "Testing phase - read-only for data sources"
     restricted_tools:
-      - database_writer
+      - EmailSender # No external communications during testing
+      - SlackNotifier # No notifications during testing
 
   production:
     description: "Production deployment - strict controls"
     restricted_tools:
-      - code_executor # No code execution in production
+      - DataAPIFetcher # No data fetching in production
+      - DatabaseConnector # No direct database access in production
     allowed_agents: # Only these agents can use tools in production
-      - SysAdmin
+      - NotificationAgent
 
 # Resource Quotas and Limits
 resource_limits:
@@ -164,14 +192,22 @@ resource_limits:
 
 # Tool Usage Quotas
 tool_usage_quotas:
-  expensive_api:
-    quota_per_hour: 10
-    description: "Expensive external API calls"
+  DataAPIFetcher:
+    quota_per_hour: 100
+    description: "External API data fetching calls"
 
-  database_writer:
+  DatabaseConnector:
+    quota_per_hour: 200
+    description: "Database connection operations"
+
+  EmailSender:
     quota_per_day: 50
-    description: "Database write operations"
+    description: "Email sending operations"
 
-  code_executor:
-    quota_per_session: 20
-    description: "Code execution attempts"
+  SlackNotifier:
+    quota_per_hour: 20
+    description: "Slack notification sends"
+
+  DocumentGenerator:
+    quota_per_day: 25
+    description: "Document generation operations"
