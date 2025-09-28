@@ -106,6 +106,9 @@ class Agent:
         self.execution_context: Dict[str, Any] = {}
         self._llm_provider: Optional[LLMProvider] = None
         
+        # Registry integration (optional)
+        self.registry_id: Optional[str] = None  # Set when registered with registry
+        
         logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model}")
     
     @property
