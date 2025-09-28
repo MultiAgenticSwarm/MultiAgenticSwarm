@@ -55,6 +55,8 @@ except ImportError:
 
 from ..llm.providers import LLMProvider, get_llm_provider
 from ..utils.logger import get_logger
+from .agent_graph import build_agent_subgraph, validate_workflow_config
+from .agent_builder import AgentWorkflowConfig, create_planning_agent_config
 
 logger = get_logger(__name__)
 
@@ -71,6 +73,26 @@ class AgentSubgraphState(TypedDict):
     parent_graph_id: str
     execution_context: Dict[str, Any]
     tool_outputs: List[Dict[str, Any]]
+    
+    # Extended state fields for configurable workflow
+    task_info: Dict[str, Any]
+    routing_complete: bool
+    execution_plan: Dict[str, Any] 
+    planning_complete: bool
+    current_step: int
+    execution_results: List[Dict[str, Any]]
+    execution_complete: bool
+    validation_results: Dict[str, Any]
+    validation_complete: bool
+    quality_score: float
+    needs_retry: bool
+    tool_coordination: Dict[str, Any]
+    available_tools: List[str]
+    tool_permissions: Dict[str, Any]
+    formatted_output: Dict[str, Any]
+    final_response: str
+    output_metadata: Dict[str, Any]
+    workflow_complete: bool
 
 
 # Placeholder for core state - will be implemented in state management layer
@@ -97,6 +119,16 @@ class AgentConfig(BaseModel):
     max_iterations: int = 10
     memory_enabled: bool = True
     tools: List[str] = Field(default_factory=list)
+    
+    # Workflow configuration
+    workflow_type: str = "default"
+    enable_input_router: bool = True
+    enable_planner: bool = True
+    enable_executor: bool = True
+    enable_validator: bool = False
+    enable_tool_coordinator: bool = False
+    enable_output_formatter: bool = True
+    node_sequence: Optional[List[str]] = None
 
 
 class Agent:
@@ -119,9 +151,12 @@ class Agent:
         memory_enabled: bool = True,
         agent_id: Optional[str] = None,
         tools: Optional[List[Any]] = None,
+        workflow_config: Optional[AgentWorkflowConfig] = None,
+        workflow_type: str = "default",
+        **workflow_kwargs
     ):
         """
-        Initialize an agent as a LangGraph subgraph.
+        Initialize an agent as a configurable LangGraph subgraph.
 
         Args:
             name: Unique name for the agent
@@ -134,6 +169,9 @@ class Agent:
             memory_enabled: Whether to maintain conversation memory
             agent_id: Optional custom agent ID
             tools: List of tools available to this agent
+            workflow_config: Pre-configured workflow settings
+            workflow_type: Type of workflow if no config provided
+            **workflow_kwargs: Additional workflow configuration parameters
         """
         if not name or not name.strip():
             raise ValueError("Agent name cannot be empty")
@@ -149,11 +187,23 @@ class Agent:
         self.memory_enabled = memory_enabled
         self.tools = tools or []
 
+        # Workflow configuration
+        if workflow_config:
+            self.workflow_config = workflow_config
+        else:
+            # Create workflow config from parameters
+            config_params = {
+                "workflow_type": workflow_type,
+                "max_iterations": max_iterations,
+                **workflow_kwargs
+            }
+            self.workflow_config = AgentWorkflowConfig(**config_params)
+
         # LangGraph components
         self._compiled_subgraph: Optional["StateGraph"] = None
         self._llm_provider: Optional[LLMProvider] = None
 
-        logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model}")
+        logger.info(f"Created agent '{name}' with {llm_provider}/{llm_model} and {self.workflow_config.workflow_type} workflow")
 
     @property
     def llm_provider(self) -> LLMProvider:
@@ -166,7 +216,7 @@ class Agent:
 
     def _create_agent_subgraph(self) -> "StateGraph":
         """
-        Create and compile the agent's internal subgraph using LangGraph's create_react_agent.
+        Create and compile the agent's internal subgraph using configurable workflow.
 
         Returns:
             Compiled StateGraph representing this agent's execution logic
@@ -174,52 +224,15 @@ class Agent:
         if not LANGGRAPH_AVAILABLE:
             raise ImportError("LangGraph not available. Please install langgraph package.")
 
-        logger.debug(f"Compiling subgraph for agent '{self.name}'")        # Get LLM provider for this agent
-        llm = self.llm_provider
+        logger.debug(f"Compiling subgraph for agent '{self.name}' with workflow '{self.workflow_config.workflow_type}'")
 
-        # Convert tools to LangChain format if needed
-        # Placeholder - actual tool conversion will depend on tool registry implementation
-        langchain_tools = self._convert_tools_to_langchain()
-
-        # Create ReAct agent using LangGraph
-        agent_runnable = create_react_agent(llm, langchain_tools)
-
-        # Build the subgraph
-        subgraph_builder = StateGraph(AgentSubgraphState)
-        subgraph_builder.add_node("agent", agent_runnable)
-
-        # Add tools node if tools are available
-        if langchain_tools:
-            subgraph_builder.add_node("tools", ToolNode(langchain_tools))
-            subgraph_builder.add_conditional_edges(
-                "agent",
-                lambda state: "tools" if state["messages"][-1].tool_calls else END,
-            )
-            subgraph_builder.add_edge("tools", "agent")
-
-        subgraph_builder.set_entry_point("agent")
-
-        return subgraph_builder.compile()
-
-    def _convert_tools_to_langchain(self) -> List[Any]:
-        """
-        Convert internal tools to LangChain tool format.
-        Placeholder implementation - actual conversion depends on tool registry.
-        """
-        # Placeholder: Convert self.tools to LangChain tools
-        # This will be implemented when tool registry is available
-        langchain_tools = []
-
-        # Example placeholder tool
-        @tool
-        def placeholder_tool(query: str) -> str:
-            """Placeholder tool for agent execution."""
-            return f"Placeholder response for: {query}"
-
-        if self.tools:
-            langchain_tools.append(placeholder_tool)
-
-        return langchain_tools
+        # Validate and prepare workflow configuration
+        config_dict = validate_workflow_config(self.workflow_config.to_dict())
+        
+        # Build the configurable subgraph
+        subgraph = build_agent_subgraph(config_dict, AgentSubgraphState)
+        
+        return subgraph
 
     def get_compiled_subgraph(self) -> "StateGraph":
         """
@@ -264,13 +277,33 @@ class Agent:
             parent_messages = state.get("messages", [])
             parent_graph_id = state.get("parent_graph_id", "")
 
-            # Prepare subgraph input state
+            # Prepare subgraph input state with all required fields
             subgraph_input = {
                 "messages": parent_messages,
                 "agent_name": self.name,
                 "parent_graph_id": parent_graph_id,
                 "execution_context": state.get("execution_metadata", {}),
                 "tool_outputs": [],
+                
+                # Initialize workflow state fields
+                "task_info": {},
+                "routing_complete": False,
+                "execution_plan": {},
+                "planning_complete": False,
+                "current_step": 0,
+                "execution_results": [],
+                "execution_complete": False,
+                "validation_results": {},
+                "validation_complete": False,
+                "quality_score": 0.0,
+                "needs_retry": False,
+                "tool_coordination": {},
+                "available_tools": [],
+                "tool_permissions": {},
+                "formatted_output": {},
+                "final_response": "",
+                "output_metadata": {},
+                "workflow_complete": False
             }
 
             # Get compiled subgraph
@@ -289,12 +322,13 @@ class Agent:
 
             # Extract results from final subgraph state
             last_node_key = list(final_subgraph_state.keys())[0]
-            final_messages = final_subgraph_state[last_node_key]["messages"]
-            final_answer = final_messages[-1].content if final_messages else ""
+            final_state = final_subgraph_state[last_node_key]
+            final_messages = final_state.get("messages", [])
+            final_answer = final_state.get("final_response") or (final_messages[-1].content if final_messages else "")
 
             # Update parent state
             updated_subgraph_states = state.get("subgraph_states", {}).copy()
-            updated_subgraph_states[self.name] = final_subgraph_state[last_node_key]
+            updated_subgraph_states[self.name] = final_state
 
             updated_agent_outputs = state.get("agent_outputs", {}).copy()
             updated_agent_outputs[self.name] = {
@@ -399,7 +433,7 @@ class Agent:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert agent to dictionary representation."""
-        return {
+        base_dict = {
             "id": self.id,
             "name": self.name,
             "description": self.description,
@@ -411,10 +445,20 @@ class Agent:
             "memory_enabled": self.memory_enabled,
             "tools": [str(tool) for tool in self.tools],  # Serialize tools
         }
+        
+        # Add workflow configuration
+        base_dict["workflow_config"] = self.workflow_config.to_dict()
+        
+        return base_dict
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Agent":
         """Create agent from dictionary representation."""
+        # Extract workflow configuration if present
+        workflow_config = None
+        if "workflow_config" in data:
+            workflow_config = AgentWorkflowConfig.from_dict(data["workflow_config"])
+        
         agent = cls(
             name=data["name"],
             description=data.get("description", ""),
@@ -426,6 +470,7 @@ class Agent:
             memory_enabled=data.get("memory_enabled", True),
             agent_id=data.get("id"),
             tools=data.get("tools", []),  # Tools will need proper deserialization
+            workflow_config=workflow_config
         )
 
         return agent
@@ -433,8 +478,33 @@ class Agent:
     @classmethod
     def from_config(cls, config: AgentConfig) -> "Agent":
         """Create agent from configuration object."""
-        return cls.from_dict(config.model_dump())
+        config_dict = config.model_dump()
+        
+        # Extract workflow configuration from config
+        workflow_config_params = {}
+        workflow_fields = [
+            "workflow_type", "enable_input_router", "enable_planner", 
+            "enable_executor", "enable_validator", "enable_tool_coordinator", 
+            "enable_output_formatter", "node_sequence"
+        ]
+        
+        for field in workflow_fields:
+            if field in config_dict:
+                workflow_config_params[field] = config_dict.pop(field)
+        
+        # Set max_iterations for workflow config
+        if "max_iterations" in config_dict:
+            workflow_config_params["max_iterations"] = config_dict["max_iterations"]
+        
+        # Create workflow config
+        workflow_config = AgentWorkflowConfig(**workflow_config_params) if workflow_config_params else None
+        
+        # Create agent with workflow config
+        return cls(
+            workflow_config=workflow_config,
+            **config_dict
+        )
 
     def __repr__(self) -> str:
         """Return string representation of the agent."""
-        return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}', subgraph=True)"
+        return f"Agent(name='{self.name}', llm='{self.llm_provider_name}/{self.llm_model}', workflow='{self.workflow_config.workflow_type}')"
