@@ -1,0 +1,32 @@
+# Simple Tool Permission Configuration
+
+tool_permissions:
+  # UI Agent - handles user interface
+  ui_agent:
+    CodeWriter: "always"
+    Database: "never"
+    FileSystem: "conditional:design_phase"
+    EmailSender: "quota:5/day"
+
+  # Data Agent - handles data processing
+  data_agent:
+    CodeWriter: "never"
+    Database: "always"
+    FileSystem: "always"
+    EmailSender: "conditional:user_approved"
+
+  # Admin Agent - system administration
+  admin_agent:
+    CodeWriter: "always"
+    Database: "always"
+    FileSystem: "always"
+    EmailSender: "always"
+
+# Simple conditions
+conditions:
+  design_phase:
+    check: "current_phase == 'design'"
+  data_safe:
+    check: "data_sensitive == false"
+  user_approved:
+    check: "user_approval == true"

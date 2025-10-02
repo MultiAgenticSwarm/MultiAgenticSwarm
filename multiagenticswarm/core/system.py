@@ -69,7 +69,7 @@ class System:
         self.automations: Dict[str, Automation] = {}
         self.collaborations: Dict[str, Collaboration] = {}
         
-        # Initialize new standardized tool executor
+        
         self.tool_executor = ToolExecutor()
         
         # Runtime state
@@ -87,6 +87,9 @@ class System:
         # Load configuration if provided
         if config_path:
             self.load_config(config_path)
+        
+        # Try to load tool permissions configuration
+        self._load_tool_permissions()
         
         logger.log_system_event("system_initialized", {
             "config_path": config_path,
@@ -500,9 +503,15 @@ class System:
         for automation_config in config.get('automations', []):
             automation = Automation.from_dict(automation_config, self.triggers)
             self.register_automation(automation)
+        
+        # Load tool permissions if available
+        if 'tool_permissions' in config or 'conditions' in config:
+            self.tool_executor.load_permissions_from_config(config)
+            logger.info("Loaded tool permissions and conditions from config")
     
     def save_config(self, config_path: str) -> None:
-        """Save current system configuration to file."""
+        """Save current system configuration
+          to file."""
         config = {
             'agents': [agent.to_dict() for agent in self.agents.values()],
             'tools': [tool.to_dict() for tool in self.tools.values()],
@@ -899,3 +908,34 @@ class System:
                 logger.error(f"Error disconnecting MCP client '{name}': {e}")
         
         logger.info("All MCP components shut down")
+    
+    def _load_tool_permissions(self):
+        """Load tool permissions from config/tool_permissions.yaml if it exists."""
+        try:
+            permissions_file = Path("config/tool_permissions.yaml")
+            if permissions_file.exists():
+                with open(permissions_file, 'r') as f:
+                    permissions_config = yaml.safe_load(f)
+                
+                self.tool_executor.load_permissions_from_config(permissions_config)
+                logger.info("Loaded tool permissions from config/tool_permissions.yaml")
+            else:
+                logger.debug("No tool_permissions.yaml found, using defaults")
+        except Exception as e:
+            logger.warning(f"Failed to load tool permissions: {e}")
+    
+    def update_tool_permission(self, agent_id: str, tool_name: str, permission: str):
+        """Update tool permission at runtime."""
+        self.tool_executor.update_permission(agent_id, tool_name, permission)
+    
+    def get_agent_permissions(self, agent_id: str) -> Dict[str, str]:
+        """Get all tool permissions for an agent."""
+        return self.tool_executor.get_agent_permissions(agent_id)
+    
+    def set_execution_context(self, context: Dict[str, Any]):
+        """Set the execution context for conditional permissions."""
+        self.tool_executor.set_context(context)
+    
+    def get_permission_audit_trail(self, agent_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get permission audit trail."""
+        return self.tool_executor.get_audit_trail(agent_id, limit)
