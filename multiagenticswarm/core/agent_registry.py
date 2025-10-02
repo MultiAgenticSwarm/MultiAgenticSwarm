@@ -166,16 +166,18 @@ class AgentRegistry:
         Returns:
             List of agent IDs with the capability
         """
-        if capability not in self._capability_index:
-            return []
-        
-        agent_ids = list(self._capability_index[capability])
+        with self._lock:
+            if capability not in self._capability_index:
+                return []
+            # Take a snapshot of agent_ids and manifests under lock
+            agent_ids = list(self._capability_index[capability])
+            manifests = {agent_id: self._manifests.get(agent_id) for agent_id in agent_ids}
         
         if not include_inactive:
             # Filter out inactive agents
             agent_ids = [
                 agent_id for agent_id in agent_ids
-                if self._manifests[agent_id].status == "active"
+                if manifests.get(agent_id) is not None and manifests[agent_id].status == "active"
             ]
         
         return agent_ids
