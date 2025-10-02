@@ -11,6 +11,21 @@ try:
     from .core.trigger import Trigger
     from .core.automation import Automation
     from .core.system import System
+    # State management components
+    from .core.state import (
+        AgentState,
+        create_initial_state,
+        validate_state,
+        serialize_state,
+        deserialize_state,
+        log_state_change
+    )
+    from .core.state_reducers import (
+        merge_agent_outputs,
+        aggregate_progress,
+        resolve_permissions,
+        merge_states
+    )
 except ImportError as e:
     # Handle potential circular import issues
     Agent = None
@@ -20,6 +35,16 @@ except ImportError as e:
     Trigger = None
     Automation = None
     System = None
+    AgentState = None
+    create_initial_state = None
+    validate_state = None
+    serialize_state = None
+    deserialize_state = None
+    log_state_change = None
+    merge_agent_outputs = None
+    aggregate_progress = None
+    resolve_permissions = None
+    merge_states = None
 
 # LLM providers
 try:
@@ -109,6 +134,17 @@ __all__ = [
     "Trigger",
     "Automation",
     "System",
+    # State management
+    "AgentState",
+    "create_initial_state",
+    "validate_state",
+    "serialize_state",
+    "deserialize_state",
+    "log_state_change",
+    "merge_agent_outputs",
+    "aggregate_progress",
+    "resolve_permissions",
+    "merge_states",
     # LLM providers (may be None if import fails)
     "LLMProvider",
     "LLMResponse",
