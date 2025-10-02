@@ -3,8 +3,6 @@ Tests for the agent registry system.
 """
 
 import pytest
-import time
-from unittest.mock import Mock, patch
 from multiagenticswarm.core.agent import Agent
 from multiagenticswarm.core.agent_registry import AgentRegistry, get_registry, register_agent, find_agent_for_task
 from multiagenticswarm.core.agent_manifest import AgentStatus, HealthStatus
