@@ -87,14 +87,13 @@ class AgentRegistry:
             raise ValueError("Agent must have at least one capability")
         
         # Generate or validate agent ID
-        if custom_id:
-            agent_id = custom_id
-            if agent_id in self._agents:
-                raise ValueError(f"Agent ID '{agent_id}' already exists")
-        else:
-            agent_id = f"{agent.name}_{uuid.uuid4().hex[:8]}"
-        
         with self._lock:
+            if custom_id:
+                agent_id = custom_id
+                if agent_id in self._agents:
+                    raise ValueError(f"Agent ID '{agent_id}' already exists")
+            else:
+                agent_id = f"{agent.name}_{uuid.uuid4().hex[:8]}"
             # Create manifest
             manifest = AgentManifest(
                 agent_id=agent_id,
