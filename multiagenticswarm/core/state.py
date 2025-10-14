@@ -938,6 +938,18 @@ def log_state_change(
 # Migration system has been moved to state_migration.py for better organization
 # Import key functions and exceptions for backward compatibility
 
+try:
+    from .state_migration import (
+        StateVersionError,
+        MigrationError,
+        compare_versions,
+        is_compatible_version,
+        migrate_state,
+        auto_migrate_state,
+        create_migration_backup,
+        restore_from_backup,
+    )
+except ImportError:
     logger.warning(
         "State migration module not available. Migration functionality is disabled. "
         "This means you will not be able to upgrade, migrate, or restore state across different versions. "
