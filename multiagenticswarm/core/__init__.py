@@ -18,6 +18,19 @@ from .state import (
     deserialize_state,
     log_state_change
 )
+from .state_migration import (
+    register_migration,
+    migrate_state, 
+    auto_migrate_state,
+    StateVersionError,
+    MigrationError,
+    compare_versions,
+    is_compatible_version,
+    create_migration_backup,
+    restore_from_backup,
+    validate_migration,
+    create_test_state
+)
 from .state_reducers import (
     merge_agent_outputs,
     aggregate_progress,
@@ -85,4 +98,17 @@ __all__ = [
     "apply_reducer",
     "merge_states",
     "REDUCERS",
+    
+    # State Migration
+    "register_migration",
+    "migrate_state", 
+    "auto_migrate_state",
+    "StateVersionError",
+    "MigrationError",
+    "compare_versions",
+    "is_compatible_version",
+    "create_migration_backup",
+    "restore_from_backup",
+    "validate_migration",
+    "create_test_state",
 ]
