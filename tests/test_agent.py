@@ -8,7 +8,8 @@ from unittest.mock import Mock, patch, MagicMock
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 
-from multiagenticswarm.core.agent import Agent, AgentConfig, AgentState, AgentSubgraphState
+from multiagenticswarm.core.agent import Agent, AgentConfig
+from multiagenticswarm.core.state import AgentState
 from multiagenticswarm.core.agent_builder import (
     AgentWorkflowConfig, create_planning_agent_config, create_reactive_agent_config,
     create_validation_agent_config, create_simple_agent_config
