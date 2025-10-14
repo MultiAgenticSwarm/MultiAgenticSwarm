@@ -6,6 +6,8 @@ import asyncio
 import json
 from typing import Dict, List, Any, Optional, Union
 from .base_tool import BaseTool, ToolCallRequest, ToolCallResponse
+from .tool_matrix import ToolMatrix
+from .tool_conditions import get_conditions
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,6 +22,14 @@ class ToolExecutor:
     def __init__(self):
         self.tools: Dict[str, BaseTool] = {}
         self.execution_history: List[Dict[str, Any]] = []
+        self.conditions = get_conditions()
+        self.permission_matrix = ToolMatrix()
+        self.context: Dict[str, Any] = {}
+    
+    def set_context(self, context: Dict[str, Any]):
+        """Set the current execution context for conditional permissions."""
+        self.context.update(context)
+        logger.debug(f"Updated execution context: {context}")
     
     def register_tool(self, tool: BaseTool) -> None:
         """Register a tool with the executor."""
@@ -27,10 +37,12 @@ class ToolExecutor:
         logger.info(f"Registered tool '{tool.name}' with executor")
     
     def get_available_tools_for_agent(self, agent_name: str) -> List[BaseTool]:
-        """Get all tools available to a specific agent."""
+        """Get all tools available to a specific agent based on permissions."""
         available = []
         for tool in self.tools.values():
-            if tool.can_be_used_by(agent_name):
+            # Check both old system compatibility and new permission system
+            if (tool.can_be_used_by(agent_name) or 
+                self.permission_matrix.check_permission(agent_name, tool.name, self.context)):
                 available.append(tool)
         return available
     
@@ -48,7 +60,7 @@ class ToolExecutor:
         agent_name: str
     ) -> ToolCallResponse:
         """
-        Execute a single tool call.
+        Execute a single tool call with permission checking.
         """
         # Convert to standardized format
         if isinstance(tool_call, dict):
@@ -67,8 +79,22 @@ class ToolExecutor:
                 error=f"Tool '{request.name}' not found"
             )
         
+        # Check permissions using the new permission matrix
+        if not self.permission_matrix.check_permission(agent_name, request.name, self.context):
+            return ToolCallResponse(
+                id=request.id,
+                name=request.name,
+                result=None,
+                success=False,
+                error=f"Permission denied: Agent '{agent_name}' cannot use tool '{request.name}'"
+            )
+        
         # Execute the tool
         response = await tool.execute(request, agent_name)
+        
+        # Update quota usage if successful
+        if response.success:
+            self.permission_matrix.use_quota(agent_name, request.name)
         
         # Log execution
         self.execution_history.append({
@@ -126,26 +152,25 @@ class ToolExecutor:
         """Get all registered tools."""
         return list(self.tools.values())
     
-    def get_execution_stats(self) -> Dict[str, Any]:
-        """Get execution statistics."""
-        total_executions = len(self.execution_history)
-        successful_executions = sum(1 for exec in self.execution_history if exec["success"])
-        
-        tool_usage = {}
-        for exec in self.execution_history:
-            tool_name = exec["tool_name"]
-            if tool_name not in tool_usage:
-                tool_usage[tool_name] = {"count": 0, "success_rate": 0}
-            tool_usage[tool_name]["count"] += 1
-        
-        # Calculate success rates
-        for tool_name in tool_usage:
-            tool_executions = [e for e in self.execution_history if e["tool_name"] == tool_name]
-            successful = sum(1 for e in tool_executions if e["success"])
-            tool_usage[tool_name]["success_rate"] = successful / len(tool_executions) if tool_executions else 0
-        
-        return {
-            "total_executions": total_executions,
-            "success_rate": successful_executions / total_executions if total_executions > 0 else 0,
-            "tool_usage": tool_usage
-        }
+    # Permission management methods
+    
+    def register_agent(self, agent_id: str, custom_permissions: Optional[Dict[str, str]] = None):
+        """Register an agent with the permission system."""
+        self.permission_matrix.register_agent(agent_id, custom_permissions)
+    
+    def update_permission(self, agent_id: str, tool_name: str, permission: str):
+        """Update permission for an agent-tool combination at runtime."""
+        self.permission_matrix.update_permission(agent_id, tool_name, permission)
+    
+    def get_agent_permissions(self, agent_id: str) -> Dict[str, str]:
+        """Get all permissions for an agent."""
+        return self.permission_matrix.get_agent_permissions(agent_id)
+    
+    def load_permissions_from_config(self, config: Dict[str, Any]):
+        """Load permissions from configuration."""
+        self.permission_matrix.load_from_config(config)
+        self.conditions.load_from_config(config)
+    
+    def get_audit_trail(self, agent_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get audit trail from permission matrix."""
+        return self.permission_matrix.get_audit_trail(agent_id, limit)
