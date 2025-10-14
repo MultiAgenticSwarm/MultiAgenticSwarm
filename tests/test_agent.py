@@ -1,5 +1,5 @@
 """
-Comprehensive test suite for LangGraph-based Agent functionality.
+Comprehensive test suite for configurable LangGraph-based Agent functionality.
 """
 
 import pytest
@@ -9,10 +9,14 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 
 from multiagenticswarm.core.agent import Agent, AgentConfig, AgentState, AgentSubgraphState
+from multiagenticswarm.core.agent_builder import (
+    AgentWorkflowConfig, create_planning_agent_config, create_reactive_agent_config,
+    create_validation_agent_config, create_simple_agent_config
+)
 
 
 class TestAgentSubgraphCreation:
-    """Test agent creation and subgraph initialization."""
+    """Test agent creation and configurable subgraph initialization."""
     
     def test_basic_agent_creation(self):
         """Test creating agent with minimal parameters."""
@@ -27,6 +31,8 @@ class TestAgentSubgraphCreation:
         assert agent.memory_enabled == True
         assert agent.id is not None
         assert agent._compiled_subgraph is None  # Lazy initialization
+        assert agent.workflow_config is not None
+        assert agent.workflow_config.workflow_type == "default"
     
     def test_agent_with_tools(self):
         """Test creating agent with tools."""
@@ -38,11 +44,13 @@ class TestAgentSubgraphCreation:
         agent = Agent(
             name="ToolAgent",
             tools=[test_tool],
-            system_prompt="You have access to tools"
+            system_prompt="You have access to tools",
+            workflow_type="reactive"
         )
         
         assert len(agent.tools) == 1
         assert agent.tools[0] == test_tool
+        assert agent.workflow_config.workflow_type == "reactive"
     
     def test_agent_from_config(self):
         """Test creating agent from AgentConfig."""
@@ -54,7 +62,9 @@ class TestAgentSubgraphCreation:
             llm_model="claude-3-5-sonnet-20241022",
             llm_config={"temperature": 0.5},
             max_iterations=5,
-            tools=["tool1", "tool2"]
+            tools=["tool1", "tool2"],
+            workflow_type="planning",
+            enable_validator=True
         )
         
         agent = Agent.from_config(config)
@@ -64,36 +74,55 @@ class TestAgentSubgraphCreation:
         assert agent.llm_provider_name == "anthropic"
         assert agent.llm_model == "claude-3-5-sonnet-20241022"
         assert agent.max_iterations == 5
+        assert agent.workflow_config.workflow_type == "planning"
+        assert agent.workflow_config.enable_validator == True
+
+    def test_agent_with_workflow_config(self):
+        """Test creating agent with pre-built workflow configuration."""
+        workflow_config = create_planning_agent_config()
+        
+        agent = Agent(
+            name="PlanningAgent",
+            workflow_config=workflow_config
+        )
+        
+        assert agent.workflow_config.workflow_type == "planning"
+        assert agent.workflow_config.enable_planner == True
+        assert agent.workflow_config.enable_validator == True
+        assert agent.workflow_config.enable_tool_coordinator == True
 
 
 class TestAgentSubgraphCompilation:
     """Test agent subgraph compilation and structure."""
     
+    @patch('multiagenticswarm.core.agent.build_agent_subgraph')
     @patch('multiagenticswarm.core.agent.get_llm_provider')
-    @patch('multiagenticswarm.core.agent.create_react_agent')
-    def test_subgraph_compilation(self, mock_create_react, mock_get_provider):
-        """Test that agent compiles into proper subgraph."""
+    def test_subgraph_compilation(self, mock_get_provider, mock_build_subgraph):
+        """Test that agent compiles into proper configurable subgraph."""
         # Mock dependencies
         mock_llm = Mock()
         mock_get_provider.return_value = mock_llm
-        mock_agent_runnable = Mock()
-        mock_create_react.return_value = mock_agent_runnable
+        mock_compiled_graph = Mock()
+        mock_build_subgraph.return_value = mock_compiled_graph
         
-        agent = Agent(name="CompileAgent")
+        agent = Agent(name="CompileAgent", workflow_type="planning")
         
         # Get compiled subgraph
         subgraph = agent.get_compiled_subgraph()
         
         # Verify compilation was called
-        mock_create_react.assert_called_once()
+        mock_build_subgraph.assert_called_once()
         assert subgraph is not None
         assert agent._compiled_subgraph is not None
     
+    @patch('multiagenticswarm.core.agent.build_agent_subgraph')
     @patch('multiagenticswarm.core.agent.get_llm_provider')
-    def test_subgraph_lazy_compilation(self, mock_get_provider):
+    def test_subgraph_lazy_compilation(self, mock_get_provider, mock_build_subgraph):
         """Test that subgraph is compiled lazily."""
         mock_llm = Mock()
         mock_get_provider.return_value = mock_llm
+        mock_compiled_graph = Mock()
+        mock_build_subgraph.return_value = mock_compiled_graph
         
         agent = Agent(name="LazyAgent")
         
@@ -108,18 +137,56 @@ class TestAgentSubgraphCompilation:
         subgraph2 = agent.get_compiled_subgraph()
         assert subgraph1 is subgraph2
     
-    def test_tool_conversion(self):
-        """Test conversion of tools to LangChain format."""
-        agent = Agent(name="ToolConvertAgent")
+    def test_workflow_configuration_validation(self):
+        """Test workflow configuration validation and setup."""
+        agent = Agent(
+            name="WorkflowAgent",
+            workflow_type="planning",
+            enable_validator=True,
+            enable_tool_coordinator=False
+        )
         
-        # Test with no tools
-        langchain_tools = agent._convert_tools_to_langchain()
-        assert isinstance(langchain_tools, list)
+        # Verify workflow configuration
+        assert agent.workflow_config.workflow_type == "planning"
+        assert agent.workflow_config.enable_validator == True
+        assert agent.workflow_config.enable_tool_coordinator == False
+
+
+class TestAgentWorkflowConfigurations:
+    """Test different agent workflow configurations."""
+    
+    def test_preset_workflow_configs(self):
+        """Test preset workflow configurations."""
+        # Planning agent
+        planning_agent = Agent(name="PlanningAgent", workflow_config=create_planning_agent_config())
+        assert planning_agent.workflow_config.workflow_type == "planning"
+        assert planning_agent.workflow_config.enable_validator == True
         
-        # Test with mock tools
-        agent.tools = ["mock_tool"]
-        langchain_tools = agent._convert_tools_to_langchain()
-        assert len(langchain_tools) > 0  # Should include placeholder tool
+        # Reactive agent
+        reactive_agent = Agent(name="ReactiveAgent", workflow_config=create_reactive_agent_config())
+        assert reactive_agent.workflow_config.workflow_type == "reactive"
+        assert reactive_agent.workflow_config.enable_planner == False
+        
+        # Validation agent
+        validation_agent = Agent(name="ValidationAgent", workflow_config=create_validation_agent_config())
+        assert validation_agent.workflow_config.workflow_type == "validation"
+        assert validation_agent.workflow_config.enable_validator == True
+        
+        # Simple agent
+        simple_agent = Agent(name="SimpleAgent", workflow_config=create_simple_agent_config())
+        assert simple_agent.workflow_config.workflow_type == "simple"
+        assert simple_agent.workflow_config.enable_planner == False
+    
+    def test_custom_node_sequence(self):
+        """Test custom node sequence configuration."""
+        custom_sequence = ["input_router", "executor", "output_formatter"]
+        agent = Agent(
+            name="CustomAgent",
+            workflow_type="custom",
+            node_sequence=custom_sequence
+        )
+        
+        assert agent.workflow_config.node_sequence == custom_sequence
 
 
 class TestAgentNodeExecution:
@@ -143,7 +210,7 @@ class TestAgentNodeExecution:
         with patch.object(agent, 'get_compiled_subgraph') as mock_get_subgraph:
             mock_subgraph = Mock()
             mock_subgraph.stream.return_value = [
-                {"agent": {
+                {"output_formatter": {
                     "messages": [
                         HumanMessage(content="Test message"),
                         AIMessage(content="Test response")
@@ -151,6 +218,8 @@ class TestAgentNodeExecution:
                     "agent_name": "CallableAgent",
                     "parent_graph_id": "test-parent-123",
                     "execution_context": {},
+                    "final_response": "Test response",
+                    "workflow_complete": True,
                     "tool_outputs": []
                 }}
             ]
@@ -329,7 +398,7 @@ class TestAgentSerialization:
     """Test agent serialization with new subgraph architecture."""
     
     def test_agent_to_dict_with_tools(self):
-        """Test serializing agent with tools."""
+        """Test serializing agent with tools and workflow config."""
         @tool
         def sample_tool(text: str) -> str:
             """A sample tool for testing serialization."""
@@ -339,7 +408,9 @@ class TestAgentSerialization:
             name="SerializeAgent",
             description="Test serialization",
             tools=[sample_tool],
-            system_prompt="You have tools available"
+            system_prompt="You have tools available",
+            workflow_type="planning",
+            enable_validator=True
         )
         
         agent_dict = agent.to_dict()
@@ -347,9 +418,12 @@ class TestAgentSerialization:
         assert agent_dict["name"] == "SerializeAgent"
         assert agent_dict["description"] == "Test serialization"
         assert len(agent_dict["tools"]) == 1  # Tools are serialized as strings
+        assert "workflow_config" in agent_dict
+        assert agent_dict["workflow_config"]["workflow_type"] == "planning"
+        assert agent_dict["workflow_config"]["enable_validator"] == True
     
     def test_agent_from_dict_restoration(self):
-        """Test restoring agent from dictionary."""
+        """Test restoring agent from dictionary with workflow config."""
         agent_dict = {
             "id": "test-restore-id",
             "name": "RestoreAgent",
@@ -360,7 +434,13 @@ class TestAgentSerialization:
             "llm_config": {"temperature": 0.7},
             "max_iterations": 8,
             "memory_enabled": True,
-            "tools": []  # Tools need proper deserialization in full implementation
+            "tools": [],  # Tools need proper deserialization in full implementation
+            "workflow_config": {
+                "workflow_type": "validation",
+                "enable_validator": True,
+                "enable_planner": True,
+                "max_iterations": 8
+            }
         }
         
         agent = Agent.from_dict(agent_dict)
@@ -370,6 +450,8 @@ class TestAgentSerialization:
         assert agent.description == "Restored from dict"
         assert agent.llm_provider_name == "anthropic"
         assert agent.llm_model == "claude-3-opus"
+        assert agent.workflow_config.workflow_type == "validation"
+        assert agent.workflow_config.enable_validator == True
 
 
 class TestAgentLLMIntegration:
@@ -463,7 +545,7 @@ class TestAgentEdgeCases:
         assert "ReprAgent" in repr_str
         assert "anthropic" in repr_str
         assert "claude-3-opus" in repr_str
-        assert "subgraph=True" in repr_str
+        assert "workflow='default'" in repr_str
     
     def test_empty_subgraph_response(self):
         """Test handling of empty subgraph response."""
